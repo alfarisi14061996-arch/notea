@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
-import { Plus, Search, ClipboardList, CheckCircle2, Circle, Clock, ChevronRight, X, FileDown, LayoutDashboard, Users, Calendar, Trash2, AlertCircle, UserCheck, Camera, Image as ImageIcon, Upload } from "lucide-react";
+import { Plus, Search, ClipboardList, CheckCircle2, Circle, Clock, ChevronRight, X, FileDown, LayoutDashboard, Users, Calendar, Trash2, AlertCircle, UserCheck, Camera, Image as ImageIcon, Upload, LogIn, LogOut } from "lucide-react";
 import { supabase } from "./supabaseClient";
 import { exportMeetingToDocx } from "./lib/exportDocx";
 import logo from "./logo.png";
+import { HAKIM_ROSTER, PEGAWAI_ROSTER } from "./staffRoster";
 
 const DOCS_BUCKET = "notea-dokumentasi";
+const ROSTER_NAMES = new Set([...HAKIM_ROSTER, ...PEGAWAI_ROSTER].map((p) => p.name));
 
 const emptyDraft = () => ({
   id: null,
@@ -90,7 +92,7 @@ export default function ENotulen() {
   const [meetings, setMeetings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [view, setView] = useState("dashboard"); // dashboard | list | form | detail
+  const [view, setView] = useState("list"); // list | dashboard | form | detail
   const [draft, setDraft] = useState(emptyDraft());
   const [editingId, setEditingId] = useState(null);
   const [search, setSearch] = useState("");
@@ -100,6 +102,30 @@ export default function ENotulen() {
   const [uploadingDocs, setUploadingDocs] = useState(false);
   const [lightboxUrl, setLightboxUrl] = useState(null);
   const fileInputRef = useRef(null);
+
+  const [session, setSession] = useState(undefined); // undefined = belum dicek, null = tidak login
+  const [showLogin, setShowLogin] = useState(false);
+  const isAdmin = !!session;
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => setSession(data.session));
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, sess) => {
+      setSession(sess);
+    });
+    return () => listener.subscription.unsubscribe();
+  }, []);
+
+  // Kalau bukan admin (misal baru logout) dan sedang di tampilan khusus admin, pindah ke arsip
+  useEffect(() => {
+    if (!isAdmin && (view === "dashboard" || view === "form")) {
+      setView("list");
+    }
+  }, [isAdmin]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function handleLogout() {
+    await supabase.auth.signOut();
+    showToast("Berhasil keluar");
+  }
 
   async function loadMeetings() {
     setLoading(true);
@@ -307,6 +333,32 @@ export default function ENotulen() {
 
   const selectedMeeting = meetings.find((m) => m.id === selectedId);
 
+  const manualAttendees = draft.attendees.filter((a) => !ROSTER_NAMES.has(a.name));
+
+  function toggleRosterPerson(person) {
+    const exists = draft.attendees.some((a) => a.name === person.name);
+    if (exists) {
+      setDraft({ ...draft, attendees: draft.attendees.filter((a) => a.name !== person.name) });
+    } else {
+      setDraft({
+        ...draft,
+        attendees: [...draft.attendees, { id: `new-${crypto.randomUUID()}`, name: person.name, position: person.position }],
+      });
+    }
+  }
+
+  function toggleRosterGroup(roster, selectAll) {
+    if (selectAll) {
+      const toAdd = roster
+        .filter((p) => !draft.attendees.some((a) => a.name === p.name))
+        .map((p) => ({ id: `new-${crypto.randomUUID()}`, name: p.name, position: p.position }));
+      setDraft({ ...draft, attendees: [...draft.attendees, ...toAdd] });
+    } else {
+      const rosterNames = new Set(roster.map((p) => p.name));
+      setDraft({ ...draft, attendees: draft.attendees.filter((a) => !rosterNames.has(a.name)) });
+    }
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-stone-50">
@@ -327,32 +379,49 @@ export default function ENotulen() {
               <div className="text-[11px] text-emerald-200 leading-tight">Rapat Digital Terintegrasi</div>
             </div>
           </div>
-          <button
-            onClick={startNew}
-            className="flex items-center gap-1.5 bg-emerald-400 hover:bg-emerald-300 text-emerald-950 font-semibold text-sm px-3.5 py-2 rounded-md transition-colors"
-          >
-            <Plus size={16} /> Rapat Baru
-          </button>
-        </div>
-        <div className="max-w-5xl mx-auto px-6 flex gap-1 border-t border-emerald-800">
-          {[
-            { key: "dashboard", label: "Dasbor", icon: LayoutDashboard },
-            { key: "list", label: "Arsip Notulen", icon: ClipboardList },
-          ].map((t) => (
+          {isAdmin && (
             <button
-              key={t.key}
-              onClick={() => setView(t.key)}
-              className={`flex items-center gap-1.5 text-sm px-3 py-2.5 border-b-2 transition-colors ${
-                view === t.key || (t.key === "list" && (view === "detail" || view === "form"))
-                  ? "border-emerald-400 text-emerald-300"
-                  : "border-transparent text-emerald-200 hover:text-emerald-300"
-              }`}
+              onClick={startNew}
+              className="flex items-center gap-1.5 bg-emerald-400 hover:bg-emerald-300 text-emerald-950 font-semibold text-sm px-3.5 py-2 rounded-md transition-colors"
             >
-              <t.icon size={14} /> {t.label}
+              <Plus size={16} /> Rapat Baru
             </button>
-          ))}
+          )}
+        </div>
+        <div className="max-w-5xl mx-auto px-6 flex items-center justify-between border-t border-emerald-800">
+          <div className="flex gap-1">
+            {[
+              ...(isAdmin ? [{ key: "dashboard", label: "Dasbor", icon: LayoutDashboard }] : []),
+              { key: "list", label: "Arsip Notulen", icon: ClipboardList },
+            ].map((t) => (
+              <button
+                key={t.key}
+                onClick={() => setView(t.key)}
+                className={`flex items-center gap-1.5 text-sm px-3 py-2.5 border-b-2 transition-colors ${
+                  view === t.key || (t.key === "list" && (view === "detail" || view === "form"))
+                    ? "border-emerald-400 text-emerald-300"
+                    : "border-transparent text-emerald-200 hover:text-emerald-300"
+                }`}
+              >
+                <t.icon size={14} /> {t.label}
+              </button>
+            ))}
+          </div>
+          <div className="py-1.5">
+            {isAdmin ? (
+              <button onClick={handleLogout} className="flex items-center gap-1.5 text-xs text-emerald-200 hover:text-white px-2 py-1">
+                <LogOut size={13} /> Keluar
+              </button>
+            ) : (
+              <button onClick={() => setShowLogin(true)} className="flex items-center gap-1.5 text-xs text-emerald-200 hover:text-white px-2 py-1">
+                <LogIn size={13} /> Masuk sebagai Admin
+              </button>
+            )}
+          </div>
         </div>
       </div>
+
+      {showLogin && <LoginModal onClose={() => setShowLogin(false)} onSuccess={() => { setShowLogin(false); showToast("Berhasil masuk"); }} />}
 
       {loadError && (
         <div className="max-w-5xl mx-auto px-6 pt-3">
@@ -547,50 +616,72 @@ export default function ENotulen() {
 
             {/* Daftar Hadir */}
             <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="text-xs font-semibold text-stone-500 uppercase tracking-wide flex items-center gap-1.5">
-                  <UserCheck size={13} /> Daftar Hadir
-                </label>
-                <button
-                  onClick={() => setDraft({ ...draft, attendees: [...draft.attendees, emptyAttendee()] })}
-                  className="text-xs text-emerald-800 hover:underline flex items-center gap-1"
-                >
-                  <Plus size={12} /> Tambah
-                </button>
-              </div>
-              {draft.attendees.length === 0 && <p className="text-sm text-stone-400">Belum ada peserta hadir dicatat.</p>}
-              <div className="space-y-2">
-                {draft.attendees.map((att, idx) => (
-                  <div key={att.id} className="flex gap-2 items-start bg-stone-50 border border-stone-200 rounded-md p-2.5">
-                    <span className="text-xs text-stone-400 w-5 pt-1.5">{idx + 1}.</span>
-                    <input
-                      value={att.name}
-                      onChange={(e) => {
-                        const items = [...draft.attendees];
-                        items[idx] = { ...att, name: e.target.value };
-                        setDraft({ ...draft, attendees: items });
-                      }}
-                      placeholder="Nama peserta"
-                      className="flex-1 text-sm px-2 py-1.5 border border-stone-300 rounded focus:outline-none focus:ring-1 focus:ring-emerald-800"
-                    />
-                    <input
-                      value={att.position}
-                      onChange={(e) => {
-                        const items = [...draft.attendees];
-                        items[idx] = { ...att, position: e.target.value };
-                        setDraft({ ...draft, attendees: items });
-                      }}
-                      placeholder="Jabatan / unit"
-                      className="w-48 text-sm px-2 py-1.5 border border-stone-300 rounded focus:outline-none focus:ring-1 focus:ring-emerald-800"
-                    />
-                    <button
-                      onClick={() => setDraft({ ...draft, attendees: draft.attendees.filter((a) => a.id !== att.id) })}
-                      className="text-stone-400 hover:text-red-500 p-1.5"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                ))}
+              <label className="text-xs font-semibold text-stone-500 uppercase tracking-wide flex items-center gap-1.5 mb-2">
+                <UserCheck size={13} /> Daftar Hadir
+                <span className="text-emerald-700 font-medium normal-case">({draft.attendees.filter((a) => a.name.trim()).length} dicentang)</span>
+              </label>
+
+              <RosterGroup
+                title="Hakim"
+                roster={HAKIM_ROSTER}
+                checkedNames={new Set(draft.attendees.map((a) => a.name))}
+                onToggle={toggleRosterPerson}
+                onToggleAll={(selectAll) => toggleRosterGroup(HAKIM_ROSTER, selectAll)}
+              />
+              <RosterGroup
+                title="Pegawai"
+                roster={PEGAWAI_ROSTER}
+                checkedNames={new Set(draft.attendees.map((a) => a.name))}
+                onToggle={toggleRosterPerson}
+                onToggleAll={(selectAll) => toggleRosterGroup(PEGAWAI_ROSTER, selectAll)}
+              />
+
+              {/* Tamu / peserta luar roster */}
+              <div className="mt-3">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-medium text-stone-500">Tamu / Peserta Luar (opsional)</span>
+                  <button
+                    onClick={() => setDraft({ ...draft, attendees: [...draft.attendees, emptyAttendee()] })}
+                    className="text-xs text-emerald-800 hover:underline flex items-center gap-1"
+                  >
+                    <Plus size={12} /> Tambah
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  {manualAttendees.map((att) => {
+                    const idx = draft.attendees.findIndex((a) => a.id === att.id);
+                    return (
+                      <div key={att.id} className="flex gap-2 items-start bg-stone-50 border border-stone-200 rounded-md p-2.5">
+                        <input
+                          value={att.name}
+                          onChange={(e) => {
+                            const items = [...draft.attendees];
+                            items[idx] = { ...att, name: e.target.value };
+                            setDraft({ ...draft, attendees: items });
+                          }}
+                          placeholder="Nama tamu"
+                          className="flex-1 text-sm px-2 py-1.5 border border-stone-300 rounded focus:outline-none focus:ring-1 focus:ring-emerald-800"
+                        />
+                        <input
+                          value={att.position}
+                          onChange={(e) => {
+                            const items = [...draft.attendees];
+                            items[idx] = { ...att, position: e.target.value };
+                            setDraft({ ...draft, attendees: items });
+                          }}
+                          placeholder="Instansi / keterangan"
+                          className="w-48 text-sm px-2 py-1.5 border border-stone-300 rounded focus:outline-none focus:ring-1 focus:ring-emerald-800"
+                        />
+                        <button
+                          onClick={() => setDraft({ ...draft, attendees: draft.attendees.filter((a) => a.id !== att.id) })}
+                          className="text-stone-400 hover:text-red-500 p-1.5"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             </div>
 
@@ -732,12 +823,16 @@ export default function ENotulen() {
                 >
                   <FileDown size={13} /> Ekspor ke Word
                 </button>
-                <button onClick={() => startEdit(selectedMeeting)} className="text-xs px-2.5 py-1.5 border border-stone-300 rounded-md hover:bg-stone-50 text-stone-600">
-                  Edit
-                </button>
-                <button onClick={() => deleteMeeting(selectedMeeting.id)} className="text-xs px-2.5 py-1.5 border border-red-200 text-red-600 rounded-md hover:bg-red-50">
-                  Hapus
-                </button>
+                {isAdmin && (
+                  <>
+                    <button onClick={() => startEdit(selectedMeeting)} className="text-xs px-2.5 py-1.5 border border-stone-300 rounded-md hover:bg-stone-50 text-stone-600">
+                      Edit
+                    </button>
+                    <button onClick={() => deleteMeeting(selectedMeeting.id)} className="text-xs px-2.5 py-1.5 border border-red-200 text-red-600 rounded-md hover:bg-red-50">
+                      Hapus
+                    </button>
+                  </>
+                )}
               </div>
             </div>
 
@@ -799,15 +894,19 @@ export default function ENotulen() {
                             {overdue && <span className="text-red-500 font-medium"> · terlambat</span>}
                           </div>
                         </div>
-                        <select
-                          value={a.status}
-                          onChange={(e) => updateActionStatus(selectedMeeting.id, a.id, e.target.value)}
-                          className={`text-xs font-medium px-2 py-1 rounded-full border-0 shrink-0 ${cfg.bg} ${cfg.color}`}
-                        >
-                          <option value="belum">Belum</option>
-                          <option value="proses">Proses</option>
-                          <option value="selesai">Selesai</option>
-                        </select>
+                        {isAdmin ? (
+                          <select
+                            value={a.status}
+                            onChange={(e) => updateActionStatus(selectedMeeting.id, a.id, e.target.value)}
+                            className={`text-xs font-medium px-2 py-1 rounded-full border-0 shrink-0 ${cfg.bg} ${cfg.color}`}
+                          >
+                            <option value="belum">Belum</option>
+                            <option value="proses">Proses</option>
+                            <option value="selesai">Selesai</option>
+                          </select>
+                        ) : (
+                          <span className={`text-xs font-medium px-2 py-1 rounded-full shrink-0 ${cfg.bg} ${cfg.color}`}>{cfg.label}</span>
+                        )}
                       </div>
                     );
                   })}
@@ -889,6 +988,114 @@ function StatCard({ label, value, icon: Icon, accent }) {
       <div>
         <div className="text-xl font-bold text-stone-800">{value}</div>
         <div className="text-xs text-stone-400">{label}</div>
+      </div>
+    </div>
+  );
+}
+
+function LoginModal({ onClose, onSuccess }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+    const { error: err } = await supabase.auth.signInWithPassword({ email, password });
+    setLoading(false);
+    if (err) {
+      setError("Email atau password salah.");
+      return;
+    }
+    onSuccess();
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <form
+        onClick={(e) => e.stopPropagation()}
+        onSubmit={handleSubmit}
+        className="bg-white rounded-lg shadow-xl w-full max-w-sm p-6 space-y-4"
+      >
+        <div className="flex items-center justify-between">
+          <h2 className="font-semibold text-stone-800" style={{ fontFamily: "Merriweather, Georgia, serif" }}>
+            Masuk sebagai Admin
+          </h2>
+          <button type="button" onClick={onClose} className="text-stone-400 hover:text-stone-600">
+            <X size={18} />
+          </button>
+        </div>
+        <p className="text-xs text-stone-400 -mt-2">Hanya admin yang bisa menambah/mengubah notulen. Publik tetap bisa melihat arsip tanpa login.</p>
+        <div>
+          <label className="text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1 block">Email</label>
+          <input
+            type="email"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="input"
+            autoFocus
+          />
+        </div>
+        <div>
+          <label className="text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1 block">Password</label>
+          <input
+            type="password"
+            required
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="input"
+          />
+        </div>
+        {error && <p className="text-xs text-red-600">{error}</p>}
+        <button
+          type="submit"
+          disabled={loading}
+          className="w-full py-2 text-sm bg-emerald-800 hover:bg-emerald-900 disabled:opacity-60 text-white rounded-md font-medium"
+        >
+          {loading ? "Memeriksa..." : "Masuk"}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+function RosterGroup({ title, roster, checkedNames, onToggle, onToggleAll }) {
+  const checkedCount = roster.filter((p) => checkedNames.has(p.name)).length;
+  const allChecked = checkedCount === roster.length;
+  return (
+    <div className="mb-3">
+      <div className="flex items-center justify-between mb-1.5">
+        <span className="text-xs font-medium text-stone-500">
+          {title} <span className="text-stone-400">({checkedCount}/{roster.length})</span>
+        </span>
+        <button onClick={() => onToggleAll(!allChecked)} className="text-xs text-emerald-800 hover:underline">
+          {allChecked ? "Kosongkan" : "Pilih Semua"}
+        </button>
+      </div>
+      <div className="grid grid-cols-2 gap-1.5 bg-stone-50 border border-stone-200 rounded-md p-2.5">
+        {roster.map((person) => {
+          const checked = checkedNames.has(person.name);
+          return (
+            <label
+              key={person.name}
+              className={`flex items-start gap-2 text-sm px-2 py-1.5 rounded cursor-pointer ${checked ? "bg-emerald-50" : "hover:bg-stone-100"}`}
+            >
+              <input
+                type="checkbox"
+                checked={checked}
+                onChange={() => onToggle(person)}
+                className="mt-0.5 accent-emerald-700"
+              />
+              <span className="min-w-0">
+                <span className="block text-stone-800 leading-tight">{person.name}</span>
+                <span className="block text-xs text-stone-400 leading-tight">{person.position}</span>
+              </span>
+            </label>
+          );
+        })}
       </div>
     </div>
   );

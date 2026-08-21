@@ -1,0 +1,51 @@
+// Roster tetap Hakim & Pegawai Pengadilan Agama Purwokerto.
+// Dipakai di form Daftar Hadir supaya notulis tinggal centang, bukan ketik manual.
+// Kalau ada pegawai baru/keluar, cukup edit array ini.
+
+export const HAKIM_ROSTER = [
+  { name: "AHMAD PADLI, S.Ag., M.H.", position: "Ketua" },
+  { name: "Drs. FAHRUDIN, MH.", position: "Hakim" },
+  { name: "Drs. ENDANG SOFWAN, MH", position: "Hakim" },
+  { name: "Drs. AHMAD FAIZ, SH.,MSI.", position: "Hakim" },
+  { name: "IKHSANUDDIN, S.H.", position: "Hakim" },
+  { name: "Drs. H. IMAM KHUSAINI", position: "Hakim" },
+  { name: "Dra. NAILY ZUBAIDAH", position: "Hakim" },
+  { name: "Drs. H. MUSTOFA KAMIL, M.H.", position: "Hakim" },
+];
+
+export const PEGAWAI_ROSTER = [
+  { name: "HELMI ASHARI, SH", position: "Panitera" },
+  { name: "SLAMET SUTADI, SAg.", position: "Sekretaris" },
+  { name: "SRI LESTARI WASIS, SHI", position: "Panitera Muda Permohonan" },
+  { name: "ARIF RACHMANTO, ST., S.H.", position: "Panitera Muda Hukum" },
+  { name: "SUSANTO, SH", position: "Panitera Muda Gugatan" },
+  { name: "ROBIN KADIR, S.Ag", position: "Kepala Sub Bagian PTIP" },
+  { name: "A.ROISUL ALAM AMRULLOH P, SHI", position: "Kepala Sub Bagian Umum dan Keuangan" },
+  { name: "NUR KHAIRANI ZULFAH, S.T.", position: "Kepala Sub Bagian Kepegawaian dan Ortala" },
+  { name: "ARDI KRISTANTO, S.H., M.H.", position: "Panitera Pengganti" },
+  { name: "NUR ALIYAH", position: "Panitera Pengganti" },
+  { name: "AGUNG FEBRI SETIYAWANTORO", position: "Juru Sita" },
+  { name: "ARNOLD DEVIYANTO, A.Md", position: "Juru Sita" },
+  { name: "DEBI NURANI MANDIANTIK,A.Md", position: "Pranata Keuangan APBN" },
+  { name: "KANE SOEDJARNOTO,A.Md", position: "Juru Sita Pengganti" },
+  { name: "YULITA INTAN PERMATASARI, A.Md.", position: "Juru Sita Pengganti" },
+  { name: "MAULANA AL FARISI, S.Ak.", position: "Penata Layanan Operasional" },
+  { name: "SIFA AMALIA, S.H.", position: "Analis Perkara Peradilan" },
+  { name: "AINAYYA ASA MAHENDRA INDARTO, S.H.", position: "Analis Perkara Peradilan" },
+  { name: "DIENA AL FITRIANA, S.H.", position: "Analis Perkara Peradilan" },
+  { name: "INEZ ANNISA FIRDA, S.H.", position: "Analis Perkara Peradilan" },
+  { name: "NUR AZIS, S.A.B.", position: "Penata Layanan Operasional" },
+  { name: "MUHAMMAD IRVAN SANTOSA, S.H.", position: "Penata Layanan Operasional" },
+  { name: "SITI ASIAH, S.H.I.", position: "Penata Layanan Operasional" },
+  { name: "LUSI ARIFIANI, S.H.I.", position: "Penata Layanan Operasional" },
+  { name: "DWI RATNA PUSPITASARI, S.H.", position: "Penata Layanan Operasional" },
+  { name: "MUHAMMAD HIFNY AKHSIN, S.Kel.", position: "Penata Layanan Operasional" },
+  { name: "AVIAN DONI, S.Kom.", position: "Penata Layanan Operasional" },
+  { name: "JEVA PRAMUWIJAYA SAKTI, A.Md", position: "Pengolah Data dan Informasi" },
+  { name: "SRI ERNA NURARIYANTI, A.Md.", position: "Pengelola Penanganan Perkara" },
+  { name: "SITI AMALLIYAH, A.Md.", position: "Pengelola Penanganan Perkara" },
+  { name: "YUDIONO", position: "Pengadministrasi Perkantoran" },
+  { name: "AMIN NASRULLOH", position: "Pengadministrasi Perkantoran" },
+  { name: "SUSWO", position: "Pengadministrasi Perkantoran" },
+  { name: "TOYO", position: "Pengadministrasi Perkantoran" },
+];

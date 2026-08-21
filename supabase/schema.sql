@@ -1,5 +1,7 @@
--- E-Notulen Rapat — skema database Supabase
--- Jalankan seluruh isi file ini di Supabase Dashboard > SQL Editor pada project baru
+-- RAPID (Rapat Digital Terintegrasi) — skema database Supabase
+-- Jalankan seluruh isi file ini di Supabase Dashboard > SQL Editor pada project BARU.
+-- Kalau project Anda sudah pernah dijalankan sebelumnya, JANGAN jalankan file ini lagi —
+-- pakai file migration_*.sql yang sesuai supaya tidak bentrok dengan data/policy yang ada.
 
 create extension if not exists "pgcrypto";
 
@@ -8,7 +10,6 @@ create table if not exists meetings (
   title text not null,
   date date not null,
   leader text,
-  participants text,
   agenda text,
   discussion text,
   decisions text,
@@ -29,7 +30,7 @@ create table if not exists action_items (
 create index if not exists idx_action_items_meeting_id on action_items(meeting_id);
 create index if not exists idx_meetings_date on meetings(date desc);
 
--- Daftar hadir (input manual oleh notulis)
+-- Daftar hadir (dicentang dari roster Hakim/Pegawai, atau input manual untuk tamu)
 create table if not exists attendees (
   id uuid primary key default gen_random_uuid(),
   meeting_id uuid not null references meetings(id) on delete cascade,
@@ -56,15 +57,15 @@ insert into storage.buckets (id, name, public)
 values ('notea-dokumentasi', 'notea-dokumentasi', true)
 on conflict (id) do nothing;
 
-create policy "allow all read on notea-dokumentasi" on storage.objects
+-- Foto boleh dilihat siapa saja (arsip publik), tapi upload/hapus hanya admin yang login.
+create policy "public read notea-dokumentasi" on storage.objects
   for select using (bucket_id = 'notea-dokumentasi');
 
-create policy "allow all insert on notea-dokumentasi" on storage.objects
-  for insert with check (bucket_id = 'notea-dokumentasi');
+create policy "admin insert notea-dokumentasi" on storage.objects
+  for insert with check (bucket_id = 'notea-dokumentasi' and auth.role() = 'authenticated');
 
-create policy "allow all delete on notea-dokumentasi" on storage.objects
-  for delete using (bucket_id = 'notea-dokumentasi');
-
+create policy "admin delete notea-dokumentasi" on storage.objects
+  for delete using (bucket_id = 'notea-dokumentasi' and auth.role() = 'authenticated');
 
 -- Trigger sederhana untuk update updated_at otomatis
 create or replace function set_updated_at()
@@ -81,24 +82,35 @@ create trigger trg_meetings_updated_at
   for each row execute function set_updated_at();
 
 -- Row Level Security
--- Aplikasi ini dipakai internal kantor (tanpa sistem login terpisah),
--- jadi akses dibuka untuk kunci anon (setara pola aplikasi internal lain).
--- Kalau nanti mau dibatasi per pengguna, ganti policy ini dengan pengecekan auth.uid().
+-- Publik (tanpa login) hanya bisa MELIHAT (SELECT) semua tabel di bawah ini.
+-- Menambah/mengubah/menghapus data (INSERT/UPDATE/DELETE) hanya untuk pengguna yang
+-- sudah login (admin) — dicek lewat auth.role() = 'authenticated'.
+--
+-- Setelah menjalankan file ini, WAJIB buat akun admin lewat:
+-- Supabase Dashboard -> Authentication -> Users -> Add user
+-- (isi email & password admin, centang "Auto Confirm User")
+
 alter table meetings enable row level security;
 alter table action_items enable row level security;
-
-create policy "allow all on meetings" on meetings
-  for all using (true) with check (true);
-
-create policy "allow all on action_items" on action_items
-  for all using (true) with check (true);
-
 alter table attendees enable row level security;
 alter table meeting_documents enable row level security;
 
-create policy "allow all on attendees" on attendees
-  for all using (true) with check (true);
+create policy "public read meetings" on meetings for select using (true);
+create policy "admin write meetings" on meetings for insert with check (auth.role() = 'authenticated');
+create policy "admin update meetings" on meetings for update using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+create policy "admin delete meetings" on meetings for delete using (auth.role() = 'authenticated');
 
-create policy "allow all on meeting_documents" on meeting_documents
-  for all using (true) with check (true);
+create policy "public read action_items" on action_items for select using (true);
+create policy "admin write action_items" on action_items for insert with check (auth.role() = 'authenticated');
+create policy "admin update action_items" on action_items for update using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+create policy "admin delete action_items" on action_items for delete using (auth.role() = 'authenticated');
 
+create policy "public read attendees" on attendees for select using (true);
+create policy "admin write attendees" on attendees for insert with check (auth.role() = 'authenticated');
+create policy "admin update attendees" on attendees for update using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+create policy "admin delete attendees" on attendees for delete using (auth.role() = 'authenticated');
+
+create policy "public read meeting_documents" on meeting_documents for select using (true);
+create policy "admin write meeting_documents" on meeting_documents for insert with check (auth.role() = 'authenticated');
+create policy "admin update meeting_documents" on meeting_documents for update using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+create policy "admin delete meeting_documents" on meeting_documents for delete using (auth.role() = 'authenticated');
