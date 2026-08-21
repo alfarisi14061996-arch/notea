@@ -10,10 +10,10 @@ Aplikasi rapat digital RAPID dengan tiga modul dalam satu rapat — **notulen**,
 3. Buka **Project Settings → API** → salin:
    - **Project URL**
    - **anon public key**
-4. **Buat akun admin**: buka **Authentication → Users → Add user** → isi email & password admin → centang **"Auto Confirm User"** → Create. Akun ini yang dipakai untuk login sebagai admin di aplikasi.
+4. **Wajib untuk login admin tanpa email**: buka **Authentication → Providers → Email** → matikan **"Confirm email"** → Save. (Detail & alasannya ada di bagian 5 di bawah — admin nanti daftar akun sendiri langsung dari aplikasi, tidak perlu dibuatkan manual di sini.)
 
 > **Sudah pernah setup Supabase sebelumnya (sebelum fitur login admin ada)?**
-> Jalankan `supabase/migration_daftar_hadir_dokumentasi.sql` (kalau belum) lalu `supabase/migration_login_admin.sql` di SQL Editor — keduanya aman dijalankan di atas database yang sudah ada. Jangan lupa langkah 4 di atas untuk membuat akun admin.
+> Jalankan `supabase/migration_daftar_hadir_dokumentasi.sql` (kalau belum) lalu `supabase/migration_login_admin.sql` di SQL Editor — keduanya aman dijalankan di atas database yang sudah ada. Jangan lupa langkah 4 di atas.
 
 ## 2. Konfigurasi Lokal
 
@@ -66,14 +66,23 @@ Publik yang membuka aplikasi (tanpa login) hanya bisa **melihat arsip notulen** 
 tombol tambah/edit/hapus yang muncul, dan aksi tersebut juga ditolak di level database (Row
 Level Security) sekalipun seseorang mencoba lewat cara lain di luar tampilan aplikasi.
 
-Untuk masuk sebagai admin, klik **"Masuk sebagai Admin"** di pojok kanan bawah header, lalu
-login dengan email & password akun admin yang Anda buat di langkah 4 pada bagian 1 di atas.
-Setelah login, muncul tombol **Rapat Baru**, **Edit**, **Hapus**, tab **Dasbor**, dan kontrol
-untuk mengubah status action item.
+Login admin pakai **username + password biasa (tanpa email)**, seperti di CABLAKA. Di baliknya
+tetap memakai Supabase Auth (supaya keamanan RLS-nya tetap jalan) — username otomatis diubah
+jadi email samaran `username@rapid.internal` yang tidak pernah benar-benar mengirim email apa
+pun, jadi wajib satu langkah setup berikut:
 
-Untuk menambah admin lain, ulangi langkah **Authentication → Users → Add user** di Supabase
-Dashboard — semua akun yang terdaftar di sana punya akses admin yang sama (tidak ada tingkatan
-peran terpisah di versi ini).
+1. Buka **Supabase Dashboard → Authentication → Providers → Email**.
+2. Matikan (nonaktifkan) opsi **"Confirm email"**.
+3. Save.
+
+Tanpa langkah ini, akun yang baru daftar tidak akan bisa langsung login (Supabase menunggu
+klik link konfirmasi dari email yang tidak pernah terkirim).
+
+Setelah itu, admin pertama tinggal buka aplikasi → klik **"Masuk sebagai Admin"** → pilih
+**"Belum punya akun admin? Buat akun baru"** → isi username & password sendiri. Admin
+berikutnya bisa daftar dengan cara yang sama. Semua akun yang terdaftar punya akses admin yang
+setara (tidak ada tingkatan peran terpisah di versi ini) — pertimbangkan untuk tidak
+menyebarluaskan link "Buat akun baru" ke luar kalangan yang berwenang.
 
 ## 6. Daftar Hadir (Roster Hakim & Pegawai)
 

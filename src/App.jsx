@@ -993,20 +993,72 @@ function StatCard({ label, value, icon: Icon, accent }) {
   );
 }
 
+const AUTH_EMAIL_DOMAIN = "rapid.internal";
+
+function usernameToEmail(username) {
+  const clean = username.trim().toLowerCase().replace(/[^a-z0-9._-]/g, "");
+  return `${clean}@${AUTH_EMAIL_DOMAIN}`;
+}
+
 function LoginModal({ onClose, onSuccess }) {
-  const [email, setEmail] = useState("");
+  const [mode, setMode] = useState("login"); // login | register
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  async function handleSubmit(e) {
+  async function handleLogin(e) {
     e.preventDefault();
     setError("");
+    if (!username.trim() || !password) {
+      setError("Username dan password wajib diisi.");
+      return;
+    }
     setLoading(true);
-    const { error: err } = await supabase.auth.signInWithPassword({ email, password });
+    const { error: err } = await supabase.auth.signInWithPassword({
+      email: usernameToEmail(username),
+      password,
+    });
     setLoading(false);
     if (err) {
-      setError("Email atau password salah.");
+      setError("Username atau password salah.");
+      return;
+    }
+    onSuccess();
+  }
+
+  async function handleRegister(e) {
+    e.preventDefault();
+    setError("");
+    if (!username.trim() || !password) {
+      setError("Username dan password wajib diisi.");
+      return;
+    }
+    if (password.length < 6) {
+      setError("Password minimal 6 karakter.");
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError("Konfirmasi password tidak sama.");
+      return;
+    }
+    setLoading(true);
+    const { data, error: err } = await supabase.auth.signUp({
+      email: usernameToEmail(username),
+      password,
+    });
+    setLoading(false);
+    if (err) {
+      if (err.message?.toLowerCase().includes("already registered")) {
+        setError("Username sudah dipakai, coba username lain.");
+      } else {
+        setError(err.message || "Gagal membuat akun.");
+      }
+      return;
+    }
+    if (!data.session) {
+      setError('Akun dibuat tapi belum bisa langsung masuk. Minta admin sistem menonaktifkan "Confirm email" di pengaturan Supabase Auth.');
       return;
     }
     onSuccess();
@@ -1016,27 +1068,29 @@ function LoginModal({ onClose, onSuccess }) {
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
       <form
         onClick={(e) => e.stopPropagation()}
-        onSubmit={handleSubmit}
+        onSubmit={mode === "login" ? handleLogin : handleRegister}
         className="bg-white rounded-lg shadow-xl w-full max-w-sm p-6 space-y-4"
       >
         <div className="flex items-center justify-between">
           <h2 className="font-semibold text-stone-800" style={{ fontFamily: "Merriweather, Georgia, serif" }}>
-            Masuk sebagai Admin
+            {mode === "login" ? "Masuk sebagai Admin" : "Buat Akun Admin"}
           </h2>
           <button type="button" onClick={onClose} className="text-stone-400 hover:text-stone-600">
             <X size={18} />
           </button>
         </div>
         <p className="text-xs text-stone-400 -mt-2">Hanya admin yang bisa menambah/mengubah notulen. Publik tetap bisa melihat arsip tanpa login.</p>
+
         <div>
-          <label className="text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1 block">Email</label>
+          <label className="text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1 block">Username</label>
           <input
-            type="email"
+            type="text"
             required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
             className="input"
             autoFocus
+            autoCapitalize="none"
           />
         </div>
         <div>
@@ -1049,13 +1103,38 @@ function LoginModal({ onClose, onSuccess }) {
             className="input"
           />
         </div>
+        {mode === "register" && (
+          <div>
+            <label className="text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1 block">Ulangi Password</label>
+            <input
+              type="password"
+              required
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              className="input"
+            />
+          </div>
+        )}
+
         {error && <p className="text-xs text-red-600">{error}</p>}
+
         <button
           type="submit"
           disabled={loading}
           className="w-full py-2 text-sm bg-emerald-800 hover:bg-emerald-900 disabled:opacity-60 text-white rounded-md font-medium"
         >
-          {loading ? "Memeriksa..." : "Masuk"}
+          {loading ? "Memproses..." : mode === "login" ? "Masuk" : "Buat Akun"}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setError("");
+            setMode(mode === "login" ? "register" : "login");
+          }}
+          className="w-full text-xs text-emerald-800 hover:underline"
+        >
+          {mode === "login" ? "Belum punya akun admin? Buat akun baru" : "Sudah punya akun? Masuk"}
         </button>
       </form>
     </div>
