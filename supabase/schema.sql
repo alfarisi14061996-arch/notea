@@ -29,6 +29,43 @@ create table if not exists action_items (
 create index if not exists idx_action_items_meeting_id on action_items(meeting_id);
 create index if not exists idx_meetings_date on meetings(date desc);
 
+-- Daftar hadir (input manual oleh notulis)
+create table if not exists attendees (
+  id uuid primary key default gen_random_uuid(),
+  meeting_id uuid not null references meetings(id) on delete cascade,
+  name text not null,
+  position text,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_attendees_meeting_id on attendees(meeting_id);
+
+-- Dokumentasi rapat (foto)
+create table if not exists meeting_documents (
+  id uuid primary key default gen_random_uuid(),
+  meeting_id uuid not null references meetings(id) on delete cascade,
+  file_path text not null,
+  file_name text,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_meeting_documents_meeting_id on meeting_documents(meeting_id);
+
+-- Storage bucket untuk foto dokumentasi rapat
+insert into storage.buckets (id, name, public)
+values ('notea-dokumentasi', 'notea-dokumentasi', true)
+on conflict (id) do nothing;
+
+create policy "allow all read on notea-dokumentasi" on storage.objects
+  for select using (bucket_id = 'notea-dokumentasi');
+
+create policy "allow all insert on notea-dokumentasi" on storage.objects
+  for insert with check (bucket_id = 'notea-dokumentasi');
+
+create policy "allow all delete on notea-dokumentasi" on storage.objects
+  for delete using (bucket_id = 'notea-dokumentasi');
+
+
 -- Trigger sederhana untuk update updated_at otomatis
 create or replace function set_updated_at()
 returns trigger as $$
@@ -55,3 +92,13 @@ create policy "allow all on meetings" on meetings
 
 create policy "allow all on action_items" on action_items
   for all using (true) with check (true);
+
+alter table attendees enable row level security;
+alter table meeting_documents enable row level security;
+
+create policy "allow all on attendees" on attendees
+  for all using (true) with check (true);
+
+create policy "allow all on meeting_documents" on meeting_documents
+  for all using (true) with check (true);
+

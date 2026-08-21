@@ -1,19 +1,22 @@
-import React, { useState, useEffect, useMemo } from "react";
-import { Plus, Search, ClipboardList, CheckCircle2, Circle, Clock, ChevronRight, X, FileDown, LayoutDashboard, Users, Calendar, Trash2, AlertCircle } from "lucide-react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
+import { Plus, Search, ClipboardList, CheckCircle2, Circle, Clock, ChevronRight, X, FileDown, LayoutDashboard, Users, Calendar, Trash2, AlertCircle, UserCheck, Camera, Image as ImageIcon, Upload } from "lucide-react";
 import { supabase } from "./supabaseClient";
 import { exportMeetingToDocx } from "./lib/exportDocx";
 import logo from "./logo.png";
+
+const DOCS_BUCKET = "notea-dokumentasi";
 
 const emptyDraft = () => ({
   id: null,
   title: "",
   date: new Date().toISOString().slice(0, 10),
   leader: "",
-  participants: "",
   agenda: "",
   discussion: "",
   decisions: "",
   actionItems: [],
+  attendees: [],
+  documents: [],
 });
 
 const emptyActionItem = () => ({
@@ -24,10 +27,16 @@ const emptyActionItem = () => ({
   status: "belum",
 });
 
+const emptyAttendee = () => ({
+  id: `new-${crypto.randomUUID()}`,
+  name: "",
+  position: "",
+});
+
 const statusConfig = {
   belum: { label: "Belum", color: "text-stone-500", bg: "bg-stone-100", icon: Circle },
   proses: { label: "Proses", color: "text-amber-700", bg: "bg-amber-100", icon: Clock },
-  selesai: { label: "Selesai", color: "text-blue-800", bg: "bg-blue-100", icon: CheckCircle2 },
+  selesai: { label: "Selesai", color: "text-emerald-800", bg: "bg-emerald-100", icon: CheckCircle2 },
 };
 
 function formatDate(iso) {
@@ -41,14 +50,13 @@ function isOverdue(item) {
   return new Date(item.deadline) < new Date(new Date().toDateString());
 }
 
-// Ubah baris dari Supabase (snake_case, action_items terpisah) menjadi bentuk state di UI
+// Ubah baris dari Supabase (snake_case, relasi terpisah) menjadi bentuk state di UI
 function mapMeetingFromDb(row) {
   return {
     id: row.id,
     title: row.title,
     date: row.date,
     leader: row.leader || "",
-    participants: row.participants || "",
     agenda: row.agenda || "",
     discussion: row.discussion || "",
     decisions: row.decisions || "",
@@ -61,6 +69,19 @@ function mapMeetingFromDb(row) {
         owner: a.owner || "",
         deadline: a.deadline || "",
         status: a.status,
+      })),
+    attendees: (row.attendees || [])
+      .slice()
+      .sort((a, b) => (a.created_at > b.created_at ? 1 : -1))
+      .map((a) => ({ id: a.id, name: a.name, position: a.position || "" })),
+    documents: (row.meeting_documents || [])
+      .slice()
+      .sort((a, b) => (a.created_at > b.created_at ? 1 : -1))
+      .map((d) => ({
+        id: d.id,
+        filePath: d.file_path,
+        fileName: d.file_name,
+        url: supabase.storage.from(DOCS_BUCKET).getPublicUrl(d.file_path).data.publicUrl,
       })),
   };
 }
@@ -76,12 +97,15 @@ export default function ENotulen() {
   const [selectedId, setSelectedId] = useState(null);
   const [loadError, setLoadError] = useState(false);
   const [toast, setToast] = useState("");
+  const [uploadingDocs, setUploadingDocs] = useState(false);
+  const [lightboxUrl, setLightboxUrl] = useState(null);
+  const fileInputRef = useRef(null);
 
   async function loadMeetings() {
     setLoading(true);
     const { data, error } = await supabase
       .from("meetings")
-      .select("*, action_items(*)")
+      .select("*, action_items(*), attendees(*), meeting_documents(*)")
       .order("date", { ascending: false });
     if (error) {
       setLoadError(true);
@@ -108,7 +132,12 @@ export default function ENotulen() {
   }
 
   function startEdit(meeting) {
-    setDraft({ ...meeting, actionItems: meeting.actionItems.map((a) => ({ ...a })) });
+    setDraft({
+      ...meeting,
+      actionItems: meeting.actionItems.map((a) => ({ ...a })),
+      attendees: meeting.attendees.map((a) => ({ ...a })),
+      documents: meeting.documents.map((d) => ({ ...d })),
+    });
     setEditingId(meeting.id);
     setView("form");
   }
@@ -123,12 +152,12 @@ export default function ENotulen() {
       title: draft.title,
       date: draft.date,
       leader: draft.leader,
-      participants: draft.participants,
       agenda: draft.agenda,
       discussion: draft.discussion,
       decisions: draft.decisions,
     };
     const cleanItems = draft.actionItems.filter((a) => a.task.trim());
+    const cleanAttendees = draft.attendees.filter((a) => a.name.trim());
 
     let meetingId = editingId;
     let err = null;
@@ -136,9 +165,9 @@ export default function ENotulen() {
     if (editingId) {
       const { error } = await supabase.from("meetings").update(meetingPayload).eq("id", editingId);
       err = error;
-      // ganti seluruh action item lama dengan yang baru (sederhana & konsisten)
       if (!err) {
         await supabase.from("action_items").delete().eq("meeting_id", editingId);
+        await supabase.from("attendees").delete().eq("meeting_id", editingId);
       }
     } else {
       const { data, error } = await supabase.from("meetings").insert(meetingPayload).select().single();
@@ -158,6 +187,51 @@ export default function ENotulen() {
       err = itemsErr;
     }
 
+    if (!err && cleanAttendees.length > 0) {
+      const attendeesPayload = cleanAttendees.map((a) => ({
+        meeting_id: meetingId,
+        name: a.name,
+        position: a.position,
+      }));
+      const { error: attErr } = await supabase.from("attendees").insert(attendeesPayload);
+      err = attErr;
+    }
+
+    // Hapus dokumentasi yang dihapus pengguna dari draft (dibandingkan data asli)
+    if (!err && editingId) {
+      const original = meetings.find((m) => m.id === editingId);
+      const removed = (original?.documents || []).filter(
+        (od) => !draft.documents.some((dd) => dd.id === od.id)
+      );
+      if (removed.length > 0) {
+        await supabase.storage.from(DOCS_BUCKET).remove(removed.map((r) => r.filePath));
+        await supabase.from("meeting_documents").delete().in("id", removed.map((r) => r.id));
+      }
+    }
+
+    // Unggah dokumentasi baru yang ditambahkan (punya properti .file)
+    const newDocs = draft.documents.filter((d) => d.file);
+    if (!err && newDocs.length > 0) {
+      setUploadingDocs(true);
+      for (const d of newDocs) {
+        const ext = d.file.name.split(".").pop();
+        const path = `${meetingId}/${crypto.randomUUID()}.${ext}`;
+        const { error: upErr } = await supabase.storage.from(DOCS_BUCKET).upload(path, d.file);
+        if (upErr) {
+          err = upErr;
+          break;
+        }
+        const { error: insErr } = await supabase
+          .from("meeting_documents")
+          .insert({ meeting_id: meetingId, file_path: path, file_name: d.file.name });
+        if (insErr) {
+          err = insErr;
+          break;
+        }
+      }
+      setUploadingDocs(false);
+    }
+
     setSaving(false);
 
     if (err) {
@@ -172,6 +246,10 @@ export default function ENotulen() {
   }
 
   async function deleteMeeting(id) {
+    const meeting = meetings.find((m) => m.id === id);
+    if (meeting?.documents?.length) {
+      await supabase.storage.from(DOCS_BUCKET).remove(meeting.documents.map((d) => d.filePath));
+    }
     const { error } = await supabase.from("meetings").delete().eq("id", id);
     if (error) {
       showToast("Gagal menghapus notulen");
@@ -202,7 +280,7 @@ export default function ENotulen() {
     const q = search.trim().toLowerCase();
     if (!q) return meetings;
     return meetings.filter((m) =>
-      [m.title, m.leader, m.agenda, m.discussion, m.decisions, m.participants]
+      [m.title, m.leader, m.agenda, m.discussion, m.decisions, m.attendees.map((a) => a.name).join(" ")]
         .join(" ")
         .toLowerCase()
         .includes(q)
@@ -239,24 +317,24 @@ export default function ENotulen() {
 
   return (
     <div className="min-h-screen bg-stone-50 text-stone-800">
-      <div className="bg-blue-900 text-stone-50">
+      <div className="bg-emerald-900 text-stone-50">
         <div className="max-w-5xl mx-auto px-6 py-5 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <img src={logo} alt="Logo NOTEA" className="w-11 h-11 rounded-full shrink-0 shadow-sm" />
+            <img src={logo} alt="Logo RAPID" className="w-11 h-11 shrink-0" />
             <div>
-              <div className="text-[10px] uppercase tracking-[0.2em] text-amber-300 font-semibold">Pengadilan Agama Purwokerto</div>
-              <h1 className="text-lg font-bold leading-tight" style={{ fontFamily: "Merriweather, Georgia, serif" }}>NOTEA</h1>
-              <div className="text-[11px] text-blue-200 leading-tight">Notulen Elektronik Terpadu</div>
+              <div className="text-[10px] uppercase tracking-[0.2em] text-emerald-300 font-semibold">Pengadilan Agama Purwokerto</div>
+              <h1 className="text-lg font-bold leading-tight" style={{ fontFamily: "Merriweather, Georgia, serif" }}>RAPID</h1>
+              <div className="text-[11px] text-emerald-200 leading-tight">Rapat Digital Terintegrasi</div>
             </div>
           </div>
           <button
             onClick={startNew}
-            className="flex items-center gap-1.5 bg-amber-400 hover:bg-amber-300 text-blue-950 font-semibold text-sm px-3.5 py-2 rounded-md transition-colors"
+            className="flex items-center gap-1.5 bg-emerald-400 hover:bg-emerald-300 text-emerald-950 font-semibold text-sm px-3.5 py-2 rounded-md transition-colors"
           >
             <Plus size={16} /> Rapat Baru
           </button>
         </div>
-        <div className="max-w-5xl mx-auto px-6 flex gap-1 border-t border-blue-800">
+        <div className="max-w-5xl mx-auto px-6 flex gap-1 border-t border-emerald-800">
           {[
             { key: "dashboard", label: "Dasbor", icon: LayoutDashboard },
             { key: "list", label: "Arsip Notulen", icon: ClipboardList },
@@ -266,8 +344,8 @@ export default function ENotulen() {
               onClick={() => setView(t.key)}
               className={`flex items-center gap-1.5 text-sm px-3 py-2.5 border-b-2 transition-colors ${
                 view === t.key || (t.key === "list" && (view === "detail" || view === "form"))
-                  ? "border-amber-400 text-amber-300"
-                  : "border-transparent text-blue-200 hover:text-amber-200"
+                  ? "border-emerald-400 text-emerald-300"
+                  : "border-transparent text-emerald-200 hover:text-emerald-300"
               }`}
             >
               <t.icon size={14} /> {t.label}
@@ -306,7 +384,7 @@ export default function ENotulen() {
                       <div key={owner} className="flex items-center gap-2">
                         <div className="w-28 text-xs text-stone-600 truncate">{owner}</div>
                         <div className="flex-1 bg-stone-100 rounded-full h-2 overflow-hidden">
-                          <div className="bg-blue-800 h-2 rounded-full" style={{ width: `${Math.min(100, count * 20)}%` }} />
+                          <div className="bg-emerald-800 h-2 rounded-full" style={{ width: `${Math.min(100, count * 20)}%` }} />
                         </div>
                         <div className="text-xs font-medium text-stone-500 w-4 text-right">{count}</div>
                       </div>
@@ -328,13 +406,13 @@ export default function ENotulen() {
                           setSelectedId(m.id);
                           setView("detail");
                         }}
-                        className="w-full flex items-center justify-between py-2 text-left hover:text-blue-800 group"
+                        className="w-full flex items-center justify-between py-2 text-left hover:text-emerald-800 group"
                       >
                         <div className="min-w-0">
                           <div className="text-sm font-medium truncate">{m.title || "(tanpa judul)"}</div>
                           <div className="text-xs text-stone-400">{formatDate(m.date)}</div>
                         </div>
-                        <ChevronRight size={14} className="text-stone-300 group-hover:text-blue-800 shrink-0" />
+                        <ChevronRight size={14} className="text-stone-300 group-hover:text-emerald-800 shrink-0" />
                       </button>
                     ))}
                   </div>
@@ -358,7 +436,7 @@ export default function ENotulen() {
                           setSelectedId(a.meetingId);
                           setView("detail");
                         }}
-                        className="text-xs text-blue-800 hover:underline shrink-0 ml-3"
+                        className="text-xs text-emerald-800 hover:underline shrink-0 ml-3"
                       >
                         Lihat rapat
                       </button>
@@ -378,7 +456,7 @@ export default function ENotulen() {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Cari judul, topik, atau peserta..."
-                className="w-full pl-9 pr-3 py-2 text-sm border border-stone-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-800/40 focus:border-blue-800"
+                className="w-full pl-9 pr-3 py-2 text-sm border border-stone-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-800/40 focus:border-emerald-800"
               />
             </div>
 
@@ -397,7 +475,7 @@ export default function ENotulen() {
                         setSelectedId(m.id);
                         setView("detail");
                       }}
-                      className="w-full text-left bg-white border border-stone-200 rounded-lg p-4 hover:border-blue-800/40 hover:shadow-sm transition-all flex items-center justify-between"
+                      className="w-full text-left bg-white border border-stone-200 rounded-lg p-4 hover:border-emerald-800/40 hover:shadow-sm transition-all flex items-center justify-between"
                     >
                       <div className="min-w-0">
                         <div className="font-medium text-stone-800 truncate">{m.title || "(tanpa judul)"}</div>
@@ -406,6 +484,16 @@ export default function ENotulen() {
                         </div>
                       </div>
                       <div className="flex items-center gap-3 shrink-0 ml-3">
+                        {m.attendees.length > 0 && (
+                          <span className="text-xs text-stone-400 flex items-center gap-1">
+                            <UserCheck size={12} /> {m.attendees.length}
+                          </span>
+                        )}
+                        {m.documents.length > 0 && (
+                          <span className="text-xs text-stone-400 flex items-center gap-1">
+                            <ImageIcon size={12} /> {m.documents.length}
+                          </span>
+                        )}
                         {pendingCount > 0 && (
                           <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium">{pendingCount} PR</span>
                         )}
@@ -445,14 +533,6 @@ export default function ENotulen() {
               <Field label="Pemimpin Rapat">
                 <input value={draft.leader} onChange={(e) => setDraft({ ...draft, leader: e.target.value })} className="input" />
               </Field>
-              <Field label="Peserta (pisahkan dengan koma)">
-                <input
-                  value={draft.participants}
-                  onChange={(e) => setDraft({ ...draft, participants: e.target.value })}
-                  placeholder="Nama 1, Nama 2, ..."
-                  className="input"
-                />
-              </Field>
             </div>
 
             <Field label="Agenda">
@@ -465,12 +545,61 @@ export default function ENotulen() {
               <textarea value={draft.decisions} onChange={(e) => setDraft({ ...draft, decisions: e.target.value })} rows={3} className="input resize-none" />
             </Field>
 
+            {/* Daftar Hadir */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs font-semibold text-stone-500 uppercase tracking-wide flex items-center gap-1.5">
+                  <UserCheck size={13} /> Daftar Hadir
+                </label>
+                <button
+                  onClick={() => setDraft({ ...draft, attendees: [...draft.attendees, emptyAttendee()] })}
+                  className="text-xs text-emerald-800 hover:underline flex items-center gap-1"
+                >
+                  <Plus size={12} /> Tambah
+                </button>
+              </div>
+              {draft.attendees.length === 0 && <p className="text-sm text-stone-400">Belum ada peserta hadir dicatat.</p>}
+              <div className="space-y-2">
+                {draft.attendees.map((att, idx) => (
+                  <div key={att.id} className="flex gap-2 items-start bg-stone-50 border border-stone-200 rounded-md p-2.5">
+                    <span className="text-xs text-stone-400 w-5 pt-1.5">{idx + 1}.</span>
+                    <input
+                      value={att.name}
+                      onChange={(e) => {
+                        const items = [...draft.attendees];
+                        items[idx] = { ...att, name: e.target.value };
+                        setDraft({ ...draft, attendees: items });
+                      }}
+                      placeholder="Nama peserta"
+                      className="flex-1 text-sm px-2 py-1.5 border border-stone-300 rounded focus:outline-none focus:ring-1 focus:ring-emerald-800"
+                    />
+                    <input
+                      value={att.position}
+                      onChange={(e) => {
+                        const items = [...draft.attendees];
+                        items[idx] = { ...att, position: e.target.value };
+                        setDraft({ ...draft, attendees: items });
+                      }}
+                      placeholder="Jabatan / unit"
+                      className="w-48 text-sm px-2 py-1.5 border border-stone-300 rounded focus:outline-none focus:ring-1 focus:ring-emerald-800"
+                    />
+                    <button
+                      onClick={() => setDraft({ ...draft, attendees: draft.attendees.filter((a) => a.id !== att.id) })}
+                      className="text-stone-400 hover:text-red-500 p-1.5"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
             <div>
               <div className="flex items-center justify-between mb-2">
                 <label className="text-xs font-semibold text-stone-500 uppercase tracking-wide">Action Item</label>
                 <button
                   onClick={() => setDraft({ ...draft, actionItems: [...draft.actionItems, emptyActionItem()] })}
-                  className="text-xs text-blue-800 hover:underline flex items-center gap-1"
+                  className="text-xs text-emerald-800 hover:underline flex items-center gap-1"
                 >
                   <Plus size={12} /> Tambah
                 </button>
@@ -487,7 +616,7 @@ export default function ENotulen() {
                         setDraft({ ...draft, actionItems: items });
                       }}
                       placeholder="Tugas / tindak lanjut"
-                      className="flex-1 text-sm px-2 py-1.5 border border-stone-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-800"
+                      className="flex-1 text-sm px-2 py-1.5 border border-stone-300 rounded focus:outline-none focus:ring-1 focus:ring-emerald-800"
                     />
                     <input
                       value={item.owner}
@@ -497,7 +626,7 @@ export default function ENotulen() {
                         setDraft({ ...draft, actionItems: items });
                       }}
                       placeholder="PIC"
-                      className="w-28 text-sm px-2 py-1.5 border border-stone-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-800"
+                      className="w-28 text-sm px-2 py-1.5 border border-stone-300 rounded focus:outline-none focus:ring-1 focus:ring-emerald-800"
                     />
                     <input
                       type="date"
@@ -507,7 +636,7 @@ export default function ENotulen() {
                         items[idx] = { ...item, deadline: e.target.value };
                         setDraft({ ...draft, actionItems: items });
                       }}
-                      className="w-36 text-sm px-2 py-1.5 border border-stone-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-800"
+                      className="w-36 text-sm px-2 py-1.5 border border-stone-300 rounded focus:outline-none focus:ring-1 focus:ring-emerald-800"
                     />
                     <button
                       onClick={() => setDraft({ ...draft, actionItems: draft.actionItems.filter((a) => a.id !== item.id) })}
@@ -520,6 +649,56 @@ export default function ENotulen() {
               </div>
             </div>
 
+            {/* Dokumentasi Rapat */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs font-semibold text-stone-500 uppercase tracking-wide flex items-center gap-1.5">
+                  <Camera size={13} /> Dokumentasi Rapat
+                </label>
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="text-xs text-emerald-800 hover:underline flex items-center gap-1"
+                >
+                  <Upload size={12} /> Unggah Foto
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => {
+                    const files = Array.from(e.target.files || []);
+                    const entries = files.map((file) => ({
+                      id: `new-${crypto.randomUUID()}`,
+                      file,
+                      fileName: file.name,
+                      url: URL.createObjectURL(file),
+                    }));
+                    setDraft((d) => ({ ...d, documents: [...d.documents, ...entries] }));
+                    e.target.value = "";
+                  }}
+                />
+              </div>
+              {draft.documents.length === 0 ? (
+                <p className="text-sm text-stone-400">Belum ada foto dokumentasi.</p>
+              ) : (
+                <div className="grid grid-cols-4 gap-2">
+                  {draft.documents.map((doc) => (
+                    <div key={doc.id} className="relative group aspect-square rounded-md overflow-hidden border border-stone-200 bg-stone-100">
+                      <img src={doc.url} alt={doc.fileName} className="w-full h-full object-cover" />
+                      <button
+                        onClick={() => setDraft({ ...draft, documents: draft.documents.filter((d) => d.id !== doc.id) })}
+                        className="absolute top-1 right-1 bg-black/60 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
             <div className="flex justify-end gap-2 pt-2 border-t border-stone-100">
               <button onClick={() => setView(editingId ? "detail" : "list")} className="px-4 py-2 text-sm text-stone-600 hover:bg-stone-100 rounded-md">
                 Batal
@@ -527,9 +706,9 @@ export default function ENotulen() {
               <button
                 onClick={saveDraft}
                 disabled={saving}
-                className="px-4 py-2 text-sm bg-blue-800 hover:bg-blue-900 disabled:opacity-60 text-white rounded-md font-medium"
+                className="px-4 py-2 text-sm bg-emerald-800 hover:bg-emerald-900 disabled:opacity-60 text-white rounded-md font-medium"
               >
-                {saving ? "Menyimpan..." : "Simpan Notulen"}
+                {saving ? (uploadingDocs ? "Mengunggah foto..." : "Menyimpan...") : "Simpan Notulen"}
               </button>
             </div>
           </div>
@@ -562,16 +741,45 @@ export default function ENotulen() {
               </div>
             </div>
 
-            {selectedMeeting.participants && (
-              <div className="text-sm">
-                <span className="text-stone-400">Peserta: </span>
-                {selectedMeeting.participants}
+            {selectedMeeting.attendees.length > 0 && (
+              <div className="text-sm text-stone-500">
+                <span className="font-medium text-stone-600">{selectedMeeting.attendees.length} peserta hadir</span>
               </div>
             )}
 
             <DetailBlock label="Agenda" text={selectedMeeting.agenda} />
             <DetailBlock label="Pembahasan" text={selectedMeeting.discussion} />
             <DetailBlock label="Keputusan" text={selectedMeeting.decisions} />
+
+            <div>
+              <label className="text-xs font-semibold text-stone-500 uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                <UserCheck size={13} /> Daftar Hadir
+              </label>
+              {selectedMeeting.attendees.length === 0 ? (
+                <p className="text-sm text-stone-400">Belum ada daftar hadir dicatat.</p>
+              ) : (
+                <div className="border border-stone-200 rounded-md overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-stone-50 text-stone-500 text-xs uppercase tracking-wide">
+                        <th className="text-left px-3 py-1.5 w-10">No</th>
+                        <th className="text-left px-3 py-1.5">Nama</th>
+                        <th className="text-left px-3 py-1.5">Jabatan / Unit</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedMeeting.attendees.map((a, idx) => (
+                        <tr key={a.id} className="border-t border-stone-100">
+                          <td className="px-3 py-1.5 text-stone-400">{idx + 1}</td>
+                          <td className="px-3 py-1.5 text-stone-800">{a.name}</td>
+                          <td className="px-3 py-1.5 text-stone-500">{a.position || "-"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
 
             <div>
               <label className="text-xs font-semibold text-stone-500 uppercase tracking-wide mb-2 block">Action Item</label>
@@ -607,15 +815,45 @@ export default function ENotulen() {
               )}
             </div>
 
-            <button onClick={() => setView("list")} className="text-sm text-blue-800 hover:underline">
+            <div>
+              <label className="text-xs font-semibold text-stone-500 uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                <ImageIcon size={13} /> Dokumentasi Rapat
+              </label>
+              {selectedMeeting.documents.length === 0 ? (
+                <p className="text-sm text-stone-400">Belum ada foto dokumentasi.</p>
+              ) : (
+                <div className="grid grid-cols-4 gap-2">
+                  {selectedMeeting.documents.map((doc) => (
+                    <button
+                      key={doc.id}
+                      onClick={() => setLightboxUrl(doc.url)}
+                      className="aspect-square rounded-md overflow-hidden border border-stone-200 bg-stone-100 hover:opacity-90"
+                    >
+                      <img src={doc.url} alt={doc.fileName} className="w-full h-full object-cover" />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <button onClick={() => setView("list")} className="text-sm text-emerald-800 hover:underline">
               ← Kembali ke arsip
             </button>
           </div>
         )}
       </div>
 
+      {lightboxUrl && (
+        <div
+          onClick={() => setLightboxUrl(null)}
+          className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-6 cursor-zoom-out"
+        >
+          <img src={lightboxUrl} alt="Dokumentasi" className="max-w-full max-h-full rounded-md shadow-2xl" />
+        </div>
+      )}
+
       {toast && (
-        <div className="fixed bottom-5 left-1/2 -translate-x-1/2 bg-blue-900 text-white text-sm px-4 py-2 rounded-md shadow-lg">{toast}</div>
+        <div className="fixed bottom-5 left-1/2 -translate-x-1/2 bg-emerald-900 text-white text-sm px-4 py-2 rounded-md shadow-lg">{toast}</div>
       )}
 
       <style>{`
@@ -638,7 +876,7 @@ export default function ENotulen() {
 
 function StatCard({ label, value, icon: Icon, accent }) {
   const accentMap = {
-    default: "text-blue-800 bg-blue-50",
+    default: "text-emerald-800 bg-emerald-50",
     amber: "text-amber-700 bg-amber-50",
     red: "text-red-600 bg-red-50",
   };

@@ -1,15 +1,18 @@
-# NOTEA — Notulen Elektronik Terpadu (PA Purwokerto)
+# RAPID — Rapat Digital Terintegrasi (PA Purwokerto)
 
-Aplikasi notulen rapat digital NOTEA dengan tracking action item, arsip pencarian, dasbor pimpinan, dan ekspor ke Word berkop surat resmi. Tanpa notifikasi WhatsApp (sesuai permintaan, untuk menghindari biaya Fonnte).
+Aplikasi rapat digital RAPID dengan tiga modul dalam satu rapat — **notulen**, **daftar hadir**, dan **dokumentasi foto** — dilengkapi tracking action item, arsip pencarian, dasbor pimpinan, dan ekspor ke Word berkop surat resmi. Tanpa notifikasi WhatsApp (sesuai permintaan, untuk menghindari biaya Fonnte).
 
 ## 1. Buat Project Supabase
 
 1. Buka [supabase.com](https://supabase.com) → **New Project** (pilih region **Singapore** agar konsisten dengan aplikasi lain, mis. KUAT).
 2. Setelah project jadi, buka **SQL Editor** → tempel seluruh isi file `supabase/schema.sql` → **Run**.
-   Ini akan membuat tabel `meetings`, `action_items`, index, trigger `updated_at`, dan policy akses.
+   Ini akan membuat tabel `meetings`, `action_items`, `attendees`, `meeting_documents`, bucket storage untuk foto, index, trigger `updated_at`, dan policy akses.
 3. Buka **Project Settings → API** → salin:
    - **Project URL**
    - **anon public key**
+
+> **Sudah pernah setup Supabase sebelumnya (sebelum fitur daftar hadir & dokumentasi ada)?**
+> Cukup jalankan `supabase/migration_daftar_hadir_dokumentasi.sql` di SQL Editor — file ini aman dijalankan di atas database yang sudah ada tanpa bentrok dengan tabel/policy lama.
 
 ## 2. Konfigurasi Lokal
 
@@ -58,8 +61,12 @@ tambahkan file gambar ke folder `public/`, lalu sisipkan `ImageRun` dari library
 
 ## 5. Struktur Data
 
-- **meetings** — data utama rapat (judul, tanggal, pemimpin, peserta, agenda, pembahasan, keputusan)
-- **action_items** — tindak lanjut per rapat (tugas, PIC, deadline, status), terhubung ke `meetings` lewat `meeting_id` dengan `ON DELETE CASCADE`
+- **meetings** — data utama rapat (judul, tanggal, pemimpin, agenda, pembahasan, keputusan)
+- **action_items** — tindak lanjut per rapat (tugas, PIC, deadline, status)
+- **attendees** — daftar hadir per rapat, diisi manual oleh notulis (nama, jabatan/unit)
+- **meeting_documents** — foto dokumentasi rapat, file tersimpan di Supabase Storage bucket `notea-dokumentasi`
+
+Semua tabel terhubung ke `meetings` lewat `meeting_id` dengan `ON DELETE CASCADE` — hapus satu rapat otomatis menghapus action item, daftar hadir, dan referensi dokumentasinya (file di storage juga ikut dibersihkan oleh aplikasi saat rapat dihapus).
 
 ## 6. Catatan Keamanan
 
