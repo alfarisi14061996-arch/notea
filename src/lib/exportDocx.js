@@ -12,6 +12,7 @@ import {
   HeadingLevel,
   ShadingType,
   ImageRun,
+  ExternalHyperlink,
 } from "docx";
 import { saveAs } from "file-saver";
 import logoUrl from "../logo.png";
@@ -27,8 +28,6 @@ async function fetchLogoBuffer() {
     return null;
   }
 }
-
-const statusLabel = { belum: "Belum", proses: "Proses", selesai: "Selesai" };
 
 function formatDate(iso) {
   if (!iso) return "-";
@@ -113,45 +112,6 @@ function infoRow(label, value) {
       new TextRun({ text: `${label.padEnd(16, " ")}`, bold: true, size: 22 }),
       new TextRun({ text: `: ${value || "-"}`, size: 22 }),
     ],
-  });
-}
-
-function actionItemsTable(items) {
-  if (!items || items.length === 0) {
-    return new Paragraph({ children: [new TextRun({ text: "-", size: 22 })] });
-  }
-
-  const headerCells = ["No", "Tugas / Tindak Lanjut", "PIC", "Deadline", "Status"].map(
-    (text) =>
-      new TableCell({
-        shading: { type: ShadingType.SOLID, color: PRIMARY, fill: PRIMARY },
-        children: [
-          new Paragraph({
-            children: [new TextRun({ text, bold: true, color: "FFFFFF", size: 20 })],
-          }),
-        ],
-      })
-  );
-
-  const rows = [new TableRow({ children: headerCells, tableHeader: true })];
-
-  items.forEach((item, idx) => {
-    rows.push(
-      new TableRow({
-        children: [
-          new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: String(idx + 1), size: 20 })] })] }),
-          new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: item.task || "-", size: 20 })] })] }),
-          new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: item.owner || "-", size: 20 })] })] }),
-          new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: formatDate(item.deadline), size: 20 })] })] }),
-          new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: statusLabel[item.status] || item.status, size: 20 })] })] }),
-        ],
-      })
-    );
-  });
-
-  return new Table({
-    width: { size: 100, type: WidthType.PERCENTAGE },
-    rows,
   });
 }
 
@@ -258,6 +218,33 @@ async function documentationSection(documents) {
   return [new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows })];
 }
 
+function attachmentsSection(attachments) {
+  if (!attachments || attachments.length === 0) {
+    return [new Paragraph({ children: [new TextRun({ text: "-", size: 22 })] })];
+  }
+
+  return attachments.map(
+    (att, idx) =>
+      new Paragraph({
+        spacing: { after: 60 },
+        children: [
+          new TextRun({ text: `${idx + 1}. `, size: 22 }),
+          new ExternalHyperlink({
+            link: att.url,
+            children: [
+              new TextRun({
+                text: att.fileName || att.url,
+                size: 22,
+                color: "1155CC",
+                underline: {},
+              }),
+            ],
+          }),
+        ],
+      })
+  );
+}
+
 export async function exportMeetingToDocx(meeting) {
   const letterhead = await buildLetterhead();
   const docSection = await documentationSection(meeting.documents);
@@ -283,17 +270,14 @@ export async function exportMeetingToDocx(meeting) {
           sectionHeading("Pembahasan"),
           bodyParagraph(meeting.discussion),
 
-          sectionHeading("Keputusan"),
-          bodyParagraph(meeting.decisions),
-
-          sectionHeading("Action Item"),
-          actionItemsTable(meeting.actionItems),
-
           sectionHeading("Daftar Hadir"),
           attendeesTable(meeting.attendees),
 
           sectionHeading("Dokumentasi Rapat"),
           ...docSection,
+
+          sectionHeading("Lampiran Rapat"),
+          ...attachmentsSection(meeting.attachments),
 
           new Paragraph({ spacing: { before: 400 }, children: [new TextRun({ text: "" })] }),
           new Paragraph({

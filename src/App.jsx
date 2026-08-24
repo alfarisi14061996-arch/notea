@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
-import { Plus, Search, ClipboardList, CheckCircle2, Circle, Clock, ChevronRight, X, FileDown, LayoutDashboard, Users, Calendar, Trash2, AlertCircle, UserCheck, Camera, Image as ImageIcon, Upload, LogIn, LogOut } from "lucide-react";
+import { Plus, Search, ClipboardList, ChevronRight, X, FileDown, LayoutDashboard, Calendar, Trash2, AlertCircle, UserCheck, Camera, Image as ImageIcon, Upload, LogIn, LogOut, Paperclip, FileText, Download } from "lucide-react";
 import { supabase } from "./supabaseClient";
 import { exportMeetingToDocx } from "./lib/exportDocx";
 import logo from "./logo.png";
 import { HAKIM_ROSTER, PEGAWAI_ROSTER } from "./staffRoster";
 
 const DOCS_BUCKET = "notea-dokumentasi";
+const ATTACHMENTS_BUCKET = "rapid-lampiran";
 const ROSTER_NAMES = new Set([...HAKIM_ROSTER, ...PEGAWAI_ROSTER].map((p) => p.name));
 
 const emptyDraft = () => ({
@@ -15,18 +16,9 @@ const emptyDraft = () => ({
   leader: "",
   agenda: "",
   discussion: "",
-  decisions: "",
-  actionItems: [],
   attendees: [],
   documents: [],
-});
-
-const emptyActionItem = () => ({
-  id: `new-${crypto.randomUUID()}`,
-  task: "",
-  owner: "",
-  deadline: "",
-  status: "belum",
+  attachments: [],
 });
 
 const emptyAttendee = () => ({
@@ -35,21 +27,10 @@ const emptyAttendee = () => ({
   position: "",
 });
 
-const statusConfig = {
-  belum: { label: "Belum", color: "text-stone-500", bg: "bg-stone-100", icon: Circle },
-  proses: { label: "Proses", color: "text-amber-700", bg: "bg-amber-100", icon: Clock },
-  selesai: { label: "Selesai", color: "text-emerald-800", bg: "bg-emerald-100", icon: CheckCircle2 },
-};
-
 function formatDate(iso) {
   if (!iso) return "";
   const d = new Date(iso + "T00:00:00");
   return d.toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" });
-}
-
-function isOverdue(item) {
-  if (!item.deadline || item.status === "selesai") return false;
-  return new Date(item.deadline) < new Date(new Date().toDateString());
 }
 
 // Ubah baris dari Supabase (snake_case, relasi terpisah) menjadi bentuk state di UI
@@ -61,17 +42,6 @@ function mapMeetingFromDb(row) {
     leader: row.leader || "",
     agenda: row.agenda || "",
     discussion: row.discussion || "",
-    decisions: row.decisions || "",
-    actionItems: (row.action_items || [])
-      .slice()
-      .sort((a, b) => (a.created_at > b.created_at ? 1 : -1))
-      .map((a) => ({
-        id: a.id,
-        task: a.task,
-        owner: a.owner || "",
-        deadline: a.deadline || "",
-        status: a.status,
-      })),
     attendees: (row.attendees || [])
       .slice()
       .sort((a, b) => (a.created_at > b.created_at ? 1 : -1))
@@ -84,6 +54,15 @@ function mapMeetingFromDb(row) {
         filePath: d.file_path,
         fileName: d.file_name,
         url: supabase.storage.from(DOCS_BUCKET).getPublicUrl(d.file_path).data.publicUrl,
+      })),
+    attachments: (row.meeting_attachments || [])
+      .slice()
+      .sort((a, b) => (a.created_at > b.created_at ? 1 : -1))
+      .map((d) => ({
+        id: d.id,
+        filePath: d.file_path,
+        fileName: d.file_name,
+        url: supabase.storage.from(ATTACHMENTS_BUCKET).getPublicUrl(d.file_path).data.publicUrl,
       })),
   };
 }
@@ -102,6 +81,7 @@ export default function ENotulen() {
   const [uploadingDocs, setUploadingDocs] = useState(false);
   const [lightboxUrl, setLightboxUrl] = useState(null);
   const fileInputRef = useRef(null);
+  const attachmentInputRef = useRef(null);
 
   const [session, setSession] = useState(undefined); // undefined = belum dicek, null = tidak login
   const [showLogin, setShowLogin] = useState(false);
@@ -131,7 +111,7 @@ export default function ENotulen() {
     setLoading(true);
     const { data, error } = await supabase
       .from("meetings")
-      .select("*, action_items(*), attendees(*), meeting_documents(*)")
+      .select("*, attendees(*), meeting_documents(*), meeting_attachments(*)")
       .order("date", { ascending: false });
     if (error) {
       setLoadError(true);
@@ -160,9 +140,9 @@ export default function ENotulen() {
   function startEdit(meeting) {
     setDraft({
       ...meeting,
-      actionItems: meeting.actionItems.map((a) => ({ ...a })),
       attendees: meeting.attendees.map((a) => ({ ...a })),
       documents: meeting.documents.map((d) => ({ ...d })),
+      attachments: meeting.attachments.map((d) => ({ ...d })),
     });
     setEditingId(meeting.id);
     setView("form");
@@ -180,9 +160,7 @@ export default function ENotulen() {
       leader: draft.leader,
       agenda: draft.agenda,
       discussion: draft.discussion,
-      decisions: draft.decisions,
     };
-    const cleanItems = draft.actionItems.filter((a) => a.task.trim());
     const cleanAttendees = draft.attendees.filter((a) => a.name.trim());
 
     let meetingId = editingId;
@@ -192,25 +170,12 @@ export default function ENotulen() {
       const { error } = await supabase.from("meetings").update(meetingPayload).eq("id", editingId);
       err = error;
       if (!err) {
-        await supabase.from("action_items").delete().eq("meeting_id", editingId);
         await supabase.from("attendees").delete().eq("meeting_id", editingId);
       }
     } else {
       const { data, error } = await supabase.from("meetings").insert(meetingPayload).select().single();
       err = error;
       if (!err) meetingId = data.id;
-    }
-
-    if (!err && cleanItems.length > 0) {
-      const itemsPayload = cleanItems.map((a) => ({
-        meeting_id: meetingId,
-        task: a.task,
-        owner: a.owner,
-        deadline: a.deadline || null,
-        status: a.status,
-      }));
-      const { error: itemsErr } = await supabase.from("action_items").insert(itemsPayload);
-      err = itemsErr;
     }
 
     if (!err && cleanAttendees.length > 0) {
@@ -258,6 +223,41 @@ export default function ENotulen() {
       setUploadingDocs(false);
     }
 
+    // Hapus lampiran yang dihapus pengguna dari draft (dibandingkan data asli)
+    if (!err && editingId) {
+      const original = meetings.find((m) => m.id === editingId);
+      const removedAtt = (original?.attachments || []).filter(
+        (oa) => !draft.attachments.some((da) => da.id === oa.id)
+      );
+      if (removedAtt.length > 0) {
+        await supabase.storage.from(ATTACHMENTS_BUCKET).remove(removedAtt.map((r) => r.filePath));
+        await supabase.from("meeting_attachments").delete().in("id", removedAtt.map((r) => r.id));
+      }
+    }
+
+    // Unggah lampiran baru yang ditambahkan (punya properti .file)
+    const newAttachments = draft.attachments.filter((d) => d.file);
+    if (!err && newAttachments.length > 0) {
+      setUploadingDocs(true);
+      for (const d of newAttachments) {
+        const ext = d.file.name.split(".").pop();
+        const path = `${meetingId}/${crypto.randomUUID()}.${ext}`;
+        const { error: upErr } = await supabase.storage.from(ATTACHMENTS_BUCKET).upload(path, d.file);
+        if (upErr) {
+          err = upErr;
+          break;
+        }
+        const { error: insErr } = await supabase
+          .from("meeting_attachments")
+          .insert({ meeting_id: meetingId, file_path: path, file_name: d.file.name });
+        if (insErr) {
+          err = insErr;
+          break;
+        }
+      }
+      setUploadingDocs(false);
+    }
+
     setSaving(false);
 
     if (err) {
@@ -276,6 +276,9 @@ export default function ENotulen() {
     if (meeting?.documents?.length) {
       await supabase.storage.from(DOCS_BUCKET).remove(meeting.documents.map((d) => d.filePath));
     }
+    if (meeting?.attachments?.length) {
+      await supabase.storage.from(ATTACHMENTS_BUCKET).remove(meeting.attachments.map((d) => d.filePath));
+    }
     const { error } = await supabase.from("meetings").delete().eq("id", id);
     if (error) {
       showToast("Gagal menghapus notulen");
@@ -286,27 +289,11 @@ export default function ENotulen() {
     showToast("Notulen dihapus");
   }
 
-  async function updateActionStatus(meetingId, itemId, status) {
-    // update optimis di UI
-    setMeetings((prev) =>
-      prev.map((m) =>
-        m.id !== meetingId
-          ? m
-          : { ...m, actionItems: m.actionItems.map((a) => (a.id === itemId ? { ...a, status } : a)) }
-      )
-    );
-    const { error } = await supabase.from("action_items").update({ status }).eq("id", itemId);
-    if (error) {
-      showToast("Gagal memperbarui status");
-      loadMeetings();
-    }
-  }
-
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return meetings;
     return meetings.filter((m) =>
-      [m.title, m.leader, m.agenda, m.discussion, m.decisions, m.attendees.map((a) => a.name).join(" ")]
+      [m.title, m.leader, m.agenda, m.discussion, m.attendees.map((a) => a.name).join(" ")]
         .join(" ")
         .toLowerCase()
         .includes(q)
@@ -319,16 +306,7 @@ export default function ENotulen() {
       const d = new Date(m.date);
       return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
     });
-    const allItems = meetings.flatMap((m) => m.actionItems.map((a) => ({ ...a, meetingTitle: m.title, meetingId: m.id })));
-    const pending = allItems.filter((a) => a.status !== "selesai");
-    const overdue = allItems.filter(isOverdue);
-    const byOwner = {};
-    pending.forEach((a) => {
-      const key = a.owner.trim() || "(belum ditentukan)";
-      byOwner[key] = (byOwner[key] || 0) + 1;
-    });
-    const topOwners = Object.entries(byOwner).sort((a, b) => b[1] - a[1]).slice(0, 5);
-    return { thisMonthCount: thisMonth.length, pending, overdue, topOwners };
+    return { thisMonthCount: thisMonth.length };
   }, [meetings]);
 
   const selectedMeeting = meetings.find((m) => m.id === selectedId);
@@ -434,86 +412,36 @@ export default function ENotulen() {
       <div className="max-w-5xl mx-auto px-6 py-6">
         {view === "dashboard" && (
           <div className="space-y-6">
-            <div className="grid grid-cols-3 gap-4">
-              <StatCard label="Rapat Bulan Ini" value={stats.thisMonthCount} icon={Calendar} />
-              <StatCard label="Action Item Tertunda" value={stats.pending.length} icon={Clock} accent="amber" />
-              <StatCard label="Terlambat" value={stats.overdue.length} icon={AlertCircle} accent="red" />
-            </div>
-
             <div className="grid grid-cols-2 gap-4">
-              <div className="bg-white rounded-lg border border-stone-200 p-4">
-                <h3 className="text-sm font-semibold text-stone-700 mb-3 flex items-center gap-1.5">
-                  <Users size={14} /> Beban Action Item per PIC
-                </h3>
-                {stats.topOwners.length === 0 ? (
-                  <p className="text-sm text-stone-400">Belum ada action item.</p>
-                ) : (
-                  <div className="space-y-2">
-                    {stats.topOwners.map(([owner, count]) => (
-                      <div key={owner} className="flex items-center gap-2">
-                        <div className="w-28 text-xs text-stone-600 truncate">{owner}</div>
-                        <div className="flex-1 bg-stone-100 rounded-full h-2 overflow-hidden">
-                          <div className="bg-emerald-800 h-2 rounded-full" style={{ width: `${Math.min(100, count * 20)}%` }} />
-                        </div>
-                        <div className="text-xs font-medium text-stone-500 w-4 text-right">{count}</div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div className="bg-white rounded-lg border border-stone-200 p-4">
-                <h3 className="text-sm font-semibold text-stone-700 mb-3">Rapat Terbaru</h3>
-                {meetings.slice(0, 5).length === 0 ? (
-                  <p className="text-sm text-stone-400">Belum ada notulen tersimpan.</p>
-                ) : (
-                  <div className="divide-y divide-stone-100">
-                    {meetings.slice(0, 5).map((m) => (
-                      <button
-                        key={m.id}
-                        onClick={() => {
-                          setSelectedId(m.id);
-                          setView("detail");
-                        }}
-                        className="w-full flex items-center justify-between py-2 text-left hover:text-emerald-800 group"
-                      >
-                        <div className="min-w-0">
-                          <div className="text-sm font-medium truncate">{m.title || "(tanpa judul)"}</div>
-                          <div className="text-xs text-stone-400">{formatDate(m.date)}</div>
-                        </div>
-                        <ChevronRight size={14} className="text-stone-300 group-hover:text-emerald-800 shrink-0" />
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
+              <StatCard label="Rapat Bulan Ini" value={stats.thisMonthCount} icon={Calendar} />
+              <StatCard label="Total Rapat Tercatat" value={meetings.length} icon={ClipboardList} />
             </div>
 
-            {stats.overdue.length > 0 && (
-              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                <h3 className="text-sm font-semibold text-red-700 mb-2 flex items-center gap-1.5">
-                  <AlertCircle size={14} /> Action Item Terlambat
-                </h3>
-                <ul className="space-y-1.5">
-                  {stats.overdue.map((a) => (
-                    <li key={a.id} className="text-sm text-stone-700 flex items-center justify-between">
-                      <span>
-                        {a.task} <span className="text-stone-400">— {a.owner || "belum ditentukan"}</span>
-                      </span>
-                      <button
-                        onClick={() => {
-                          setSelectedId(a.meetingId);
-                          setView("detail");
-                        }}
-                        className="text-xs text-emerald-800 hover:underline shrink-0 ml-3"
-                      >
-                        Lihat rapat
-                      </button>
-                    </li>
+            <div className="bg-white rounded-lg border border-stone-200 p-4">
+              <h3 className="text-sm font-semibold text-stone-700 mb-3">Rapat Terbaru</h3>
+              {meetings.slice(0, 5).length === 0 ? (
+                <p className="text-sm text-stone-400">Belum ada notulen tersimpan.</p>
+              ) : (
+                <div className="divide-y divide-stone-100">
+                  {meetings.slice(0, 5).map((m) => (
+                    <button
+                      key={m.id}
+                      onClick={() => {
+                        setSelectedId(m.id);
+                        setView("detail");
+                      }}
+                      className="w-full flex items-center justify-between py-2 text-left hover:text-emerald-800 group"
+                    >
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium truncate">{m.title || "(tanpa judul)"}</div>
+                        <div className="text-xs text-stone-400">{formatDate(m.date)}</div>
+                      </div>
+                      <ChevronRight size={14} className="text-stone-300 group-hover:text-emerald-800 shrink-0" />
+                    </button>
                   ))}
-                </ul>
-              </div>
-            )}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -536,7 +464,6 @@ export default function ENotulen() {
             ) : (
               <div className="space-y-2">
                 {filtered.map((m) => {
-                  const pendingCount = m.actionItems.filter((a) => a.status !== "selesai").length;
                   return (
                     <button
                       key={m.id}
@@ -563,8 +490,10 @@ export default function ENotulen() {
                             <ImageIcon size={12} /> {m.documents.length}
                           </span>
                         )}
-                        {pendingCount > 0 && (
-                          <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium">{pendingCount} PR</span>
+                        {m.attachments.length > 0 && (
+                          <span className="text-xs text-stone-400 flex items-center gap-1">
+                            <Paperclip size={12} /> {m.attachments.length}
+                          </span>
                         )}
                         <ChevronRight size={16} className="text-stone-300" />
                       </div>
@@ -609,9 +538,6 @@ export default function ENotulen() {
             </Field>
             <Field label="Pembahasan">
               <textarea value={draft.discussion} onChange={(e) => setDraft({ ...draft, discussion: e.target.value })} rows={4} className="input resize-none" />
-            </Field>
-            <Field label="Keputusan">
-              <textarea value={draft.decisions} onChange={(e) => setDraft({ ...draft, decisions: e.target.value })} rows={3} className="input resize-none" />
             </Field>
 
             {/* Daftar Hadir */}
@@ -685,61 +611,6 @@ export default function ENotulen() {
               </div>
             </div>
 
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="text-xs font-semibold text-stone-500 uppercase tracking-wide">Action Item</label>
-                <button
-                  onClick={() => setDraft({ ...draft, actionItems: [...draft.actionItems, emptyActionItem()] })}
-                  className="text-xs text-emerald-800 hover:underline flex items-center gap-1"
-                >
-                  <Plus size={12} /> Tambah
-                </button>
-              </div>
-              {draft.actionItems.length === 0 && <p className="text-sm text-stone-400">Belum ada action item.</p>}
-              <div className="space-y-2">
-                {draft.actionItems.map((item, idx) => (
-                  <div key={item.id} className="flex gap-2 items-start bg-stone-50 border border-stone-200 rounded-md p-2.5">
-                    <input
-                      value={item.task}
-                      onChange={(e) => {
-                        const items = [...draft.actionItems];
-                        items[idx] = { ...item, task: e.target.value };
-                        setDraft({ ...draft, actionItems: items });
-                      }}
-                      placeholder="Tugas / tindak lanjut"
-                      className="flex-1 text-sm px-2 py-1.5 border border-stone-300 rounded focus:outline-none focus:ring-1 focus:ring-emerald-800"
-                    />
-                    <input
-                      value={item.owner}
-                      onChange={(e) => {
-                        const items = [...draft.actionItems];
-                        items[idx] = { ...item, owner: e.target.value };
-                        setDraft({ ...draft, actionItems: items });
-                      }}
-                      placeholder="PIC"
-                      className="w-28 text-sm px-2 py-1.5 border border-stone-300 rounded focus:outline-none focus:ring-1 focus:ring-emerald-800"
-                    />
-                    <input
-                      type="date"
-                      value={item.deadline}
-                      onChange={(e) => {
-                        const items = [...draft.actionItems];
-                        items[idx] = { ...item, deadline: e.target.value };
-                        setDraft({ ...draft, actionItems: items });
-                      }}
-                      className="w-36 text-sm px-2 py-1.5 border border-stone-300 rounded focus:outline-none focus:ring-1 focus:ring-emerald-800"
-                    />
-                    <button
-                      onClick={() => setDraft({ ...draft, actionItems: draft.actionItems.filter((a) => a.id !== item.id) })}
-                      className="text-stone-400 hover:text-red-500 p-1.5"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-
             {/* Dokumentasi Rapat */}
             <div>
               <div className="flex items-center justify-between mb-2">
@@ -783,6 +654,57 @@ export default function ENotulen() {
                         className="absolute top-1 right-1 bg-black/60 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
                       >
                         <X size={12} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Lampiran Rapat */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs font-semibold text-stone-500 uppercase tracking-wide flex items-center gap-1.5">
+                  <Paperclip size={13} /> Lampiran Rapat
+                </label>
+                <button
+                  onClick={() => attachmentInputRef.current?.click()}
+                  className="text-xs text-emerald-800 hover:underline flex items-center gap-1"
+                >
+                  <Upload size={12} /> Unggah Lampiran
+                </button>
+                <input
+                  ref={attachmentInputRef}
+                  type="file"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => {
+                    const files = Array.from(e.target.files || []);
+                    const entries = files.map((file) => ({
+                      id: `new-${crypto.randomUUID()}`,
+                      file,
+                      fileName: file.name,
+                      url: URL.createObjectURL(file),
+                    }));
+                    setDraft((d) => ({ ...d, attachments: [...d.attachments, ...entries] }));
+                    e.target.value = "";
+                  }}
+                />
+              </div>
+              <p className="text-xs text-stone-400 mb-2">Undangan, surat, atau dokumen pendukung lain (PDF, Word, dll).</p>
+              {draft.attachments.length === 0 ? (
+                <p className="text-sm text-stone-400">Belum ada lampiran.</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {draft.attachments.map((att) => (
+                    <div key={att.id} className="flex items-center gap-2 bg-stone-50 border border-stone-200 rounded-md px-3 py-2">
+                      <FileText size={15} className="text-stone-400 shrink-0" />
+                      <span className="text-sm text-stone-700 truncate flex-1">{att.fileName}</span>
+                      <button
+                        onClick={() => setDraft({ ...draft, attachments: draft.attachments.filter((a) => a.id !== att.id) })}
+                        className="text-stone-400 hover:text-red-500 p-1"
+                      >
+                        <X size={14} />
                       </button>
                     </div>
                   ))}
@@ -844,7 +766,6 @@ export default function ENotulen() {
 
             <DetailBlock label="Agenda" text={selectedMeeting.agenda} />
             <DetailBlock label="Pembahasan" text={selectedMeeting.discussion} />
-            <DetailBlock label="Keputusan" text={selectedMeeting.decisions} />
 
             <div>
               <label className="text-xs font-semibold text-stone-500 uppercase tracking-wide mb-2 flex items-center gap-1.5">
@@ -877,44 +798,6 @@ export default function ENotulen() {
             </div>
 
             <div>
-              <label className="text-xs font-semibold text-stone-500 uppercase tracking-wide mb-2 block">Action Item</label>
-              {selectedMeeting.actionItems.length === 0 ? (
-                <p className="text-sm text-stone-400">Tidak ada action item pada rapat ini.</p>
-              ) : (
-                <div className="space-y-2">
-                  {selectedMeeting.actionItems.map((a) => {
-                    const cfg = statusConfig[a.status];
-                    const overdue = isOverdue(a);
-                    return (
-                      <div key={a.id} className={`flex items-center justify-between gap-3 p-2.5 rounded-md border ${overdue ? "border-red-200 bg-red-50" : "border-stone-200 bg-stone-50"}`}>
-                        <div className="min-w-0">
-                          <div className="text-sm text-stone-800">{a.task}</div>
-                          <div className="text-xs text-stone-400">
-                            {a.owner || "belum ditentukan"} {a.deadline && `· deadline ${formatDate(a.deadline)}`}
-                            {overdue && <span className="text-red-500 font-medium"> · terlambat</span>}
-                          </div>
-                        </div>
-                        {isAdmin ? (
-                          <select
-                            value={a.status}
-                            onChange={(e) => updateActionStatus(selectedMeeting.id, a.id, e.target.value)}
-                            className={`text-xs font-medium px-2 py-1 rounded-full border-0 shrink-0 ${cfg.bg} ${cfg.color}`}
-                          >
-                            <option value="belum">Belum</option>
-                            <option value="proses">Proses</option>
-                            <option value="selesai">Selesai</option>
-                          </select>
-                        ) : (
-                          <span className={`text-xs font-medium px-2 py-1 rounded-full shrink-0 ${cfg.bg} ${cfg.color}`}>{cfg.label}</span>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            <div>
               <label className="text-xs font-semibold text-stone-500 uppercase tracking-wide mb-2 flex items-center gap-1.5">
                 <ImageIcon size={13} /> Dokumentasi Rapat
               </label>
@@ -930,6 +813,31 @@ export default function ENotulen() {
                     >
                       <img src={doc.url} alt={doc.fileName} className="w-full h-full object-cover" />
                     </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-stone-500 uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                <Paperclip size={13} /> Lampiran Rapat
+              </label>
+              {selectedMeeting.attachments.length === 0 ? (
+                <p className="text-sm text-stone-400">Belum ada lampiran.</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {selectedMeeting.attachments.map((att) => (
+                    <a
+                      key={att.id}
+                      href={att.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-2 bg-stone-50 border border-stone-200 rounded-md px-3 py-2 hover:border-emerald-800/40"
+                    >
+                      <FileText size={15} className="text-stone-400 shrink-0" />
+                      <span className="text-sm text-stone-700 truncate flex-1">{att.fileName}</span>
+                      <Download size={14} className="text-stone-400 shrink-0" />
+                    </a>
                   ))}
                 </div>
               )}

@@ -13,7 +13,7 @@ Aplikasi rapat digital RAPID dengan tiga modul dalam satu rapat — **notulen**,
 4. **Wajib untuk login admin tanpa email**: buka **Authentication → Providers → Email** → matikan **"Confirm email"** → Save. (Detail & alasannya ada di bagian 5 di bawah — admin nanti daftar akun sendiri langsung dari aplikasi, tidak perlu dibuatkan manual di sini.)
 
 > **Sudah pernah setup Supabase sebelumnya (sebelum fitur login admin ada)?**
-> Jalankan `supabase/migration_daftar_hadir_dokumentasi.sql` (kalau belum) lalu `supabase/migration_login_admin.sql` di SQL Editor — keduanya aman dijalankan di atas database yang sudah ada. Jangan lupa langkah 4 di atas.
+> Jalankan `supabase/migration_daftar_hadir_dokumentasi.sql` (kalau belum), lalu `supabase/migration_login_admin.sql`, lalu `supabase/migration_hapus_keputusan_action_item.sql` (kalau sempat pernah pakai fitur Keputusan/Action Item), lalu `supabase/migration_lampiran_rapat.sql` di SQL Editor — semuanya aman dijalankan di atas database yang sudah ada. Jangan lupa langkah 4 di atas.
 
 ## 2. Konfigurasi Lokal
 
@@ -104,6 +104,7 @@ dan push ke GitHub (Vercel otomatis redeploy). Formatnya:
 - **action_items** — tindak lanjut per rapat (tugas, PIC, deadline, status)
 - **attendees** — daftar hadir per rapat, diisi manual oleh notulis (nama, jabatan/unit)
 - **meeting_documents** — foto dokumentasi rapat, file tersimpan di Supabase Storage bucket `notea-dokumentasi`
+- **meeting_attachments** — lampiran rapat (undangan, surat, dokumen pendukung — PDF/Word/format lain), file tersimpan di Supabase Storage bucket `rapid-lampiran`
 
 Semua tabel terhubung ke `meetings` lewat `meeting_id` dengan `ON DELETE CASCADE` — hapus satu rapat otomatis menghapus action item, daftar hadir, dan referensi dokumentasinya (file di storage juga ikut dibersihkan oleh aplikasi saat rapat dihapus).
 
