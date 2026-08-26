@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
-import { Plus, Search, ClipboardList, ChevronRight, X, FileDown, LayoutDashboard, Calendar, Trash2, AlertCircle, UserCheck, Camera, Image as ImageIcon, Upload, LogIn, LogOut, Paperclip, FileText, Download, Archive, ChevronLeft } from "lucide-react";
+import { Plus, Search, ClipboardList, ChevronRight, X, FileDown, LayoutDashboard, Calendar, Trash2, AlertCircle, UserCheck, Camera, Image as ImageIcon, Upload, LogIn, LogOut, Paperclip, FileText, Download, Archive, ChevronLeft, Home, ArrowRight, CheckCircle2 } from "lucide-react";
 import { supabase } from "./supabaseClient";
 import { exportMeetingToDocx } from "./lib/exportDocx";
 import logo from "./logo.png";
@@ -85,7 +85,7 @@ export default function ENotulen() {
   const [meetings, setMeetings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [view, setView] = useState("list"); // list | dashboard | calendar | form | detail
+  const [view, setView] = useState("home"); // home | list | dashboard | calendar | form | detail
   const [draft, setDraft] = useState(emptyDraft());
   const [editingId, setEditingId] = useState(null);
   const [search, setSearch] = useState("");
@@ -443,6 +443,7 @@ export default function ENotulen() {
         <div className="max-w-5xl mx-auto px-6 flex items-center justify-between border-t border-white/10 relative">
           <div className="flex gap-1">
             {[
+              { key: "home", label: "Beranda", icon: Home },
               ...(isAdmin ? [{ key: "dashboard", label: "Dasbor", icon: LayoutDashboard }] : []),
               { key: "list", label: "Arsip Notulen", icon: ClipboardList },
               { key: "calendar", label: "Kalender", icon: Calendar },
@@ -484,6 +485,21 @@ export default function ENotulen() {
         </div>
       )}
 
+      {view === "home" && (
+        <HomeView
+          isAdmin={isAdmin}
+          meetings={meetings}
+          onGoToArsip={() => setView("list")}
+          onGoToKalender={() => setView("calendar")}
+          onNewMeeting={startNew}
+          onSelectMeeting={(id) => {
+            setSelectedId(id);
+            setView("detail");
+          }}
+        />
+      )}
+
+      {view !== "home" && (
       <div className="max-w-5xl mx-auto px-6 py-6">
         {view === "dashboard" && (
           <div className="space-y-6">
@@ -972,6 +988,7 @@ export default function ENotulen() {
           </div>
         )}
       </div>
+      )}
 
       {lightboxUrl && (
         <div
@@ -1001,6 +1018,165 @@ export default function ENotulen() {
           box-shadow: 0 0 0 3px rgba(6,95,70,0.12);
         }
       `}</style>
+    </div>
+  );
+}
+
+function HomeView({ isAdmin, meetings, onGoToArsip, onGoToKalender, onNewMeeting, onSelectMeeting }) {
+  const recent = meetings.slice(0, 3);
+
+  const features = [
+    {
+      icon: ClipboardList,
+      title: "Notulen Digital",
+      desc: "Catat agenda, pembahasan, dan hasil rapat secara terstruktur — tersimpan rapi dan mudah dicari kembali kapan saja.",
+    },
+    {
+      icon: UserCheck,
+      title: "Daftar Hadir",
+      desc: "Tinggal centang dari daftar Hakim & Pegawai, tanpa perlu tulis nama manual satu per satu.",
+    },
+    {
+      icon: Camera,
+      title: "Dokumentasi & Lampiran",
+      desc: "Unggah foto kegiatan dan dokumen pendukung seperti undangan, semuanya tersimpan bersama notulennya.",
+    },
+    {
+      icon: Calendar,
+      title: "Kalender Rapat",
+      desc: "Lihat jadwal rapat mendatang dan telusuri riwayat rapat yang sudah berlangsung dalam satu tampilan.",
+    },
+  ];
+
+  return (
+    <div>
+      {/* HERO */}
+      <div
+        className="relative overflow-hidden text-stone-50"
+        style={{ background: "linear-gradient(135deg, #052e21 0%, #0b4a37 55%, #0f5c44 100%)" }}
+      >
+        <div
+          className="absolute inset-0 opacity-[0.06] pointer-events-none"
+          style={{
+            backgroundImage:
+              "radial-gradient(circle at 15% 25%, #ffffff 1px, transparent 1px), radial-gradient(circle at 75% 65%, #ffffff 1px, transparent 1px)",
+            backgroundSize: "44px 44px, 60px 60px",
+          }}
+        />
+        <div className="max-w-5xl mx-auto px-6 py-16 md:py-20 grid md:grid-cols-2 gap-10 items-center relative">
+          <div>
+            <div className="inline-block text-[11px] uppercase tracking-[0.2em] text-emerald-300 font-semibold bg-white/5 border border-white/10 rounded-full px-3 py-1 mb-4">
+              Pengadilan Agama Purwokerto
+            </div>
+            <h1 className="text-3xl md:text-4xl font-extrabold leading-tight tracking-tight mb-4" style={{ fontFamily: "Merriweather, Georgia, serif" }}>
+              Solusi Terintegrasi untuk Rapat &amp; Notulen Anda
+            </h1>
+            <p className="text-emerald-100/80 text-sm md:text-base leading-relaxed mb-7 max-w-md">
+              RAPID menyatukan notulen, daftar hadir, dokumentasi, dan lampiran rapat dalam satu
+              arsip digital yang rapi, aman, dan mudah ditelusuri kembali kapan saja.
+            </p>
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                onClick={onGoToArsip}
+                className="flex items-center gap-1.5 bg-emerald-400 hover:bg-emerald-300 text-emerald-950 font-semibold text-sm px-5 py-3 rounded-lg shadow-md shadow-emerald-900/30 transition-all hover:-translate-y-0.5"
+              >
+                Lihat Arsip Notulen <ArrowRight size={16} />
+              </button>
+              <button
+                onClick={onGoToKalender}
+                className="flex items-center gap-1.5 text-sm font-medium text-emerald-100 hover:text-white px-4 py-3 rounded-lg border border-white/20 hover:border-white/40 transition-colors"
+              >
+                <Calendar size={15} /> Lihat Kalender
+              </button>
+              {isAdmin && (
+                <button
+                  onClick={onNewMeeting}
+                  className="flex items-center gap-1.5 text-sm font-medium text-emerald-100 hover:text-white px-4 py-3 rounded-lg border border-white/20 hover:border-white/40 transition-colors"
+                >
+                  <Plus size={15} /> Rapat Baru
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Mockup card */}
+          <div className="relative hidden md:block h-72">
+            <div className="absolute top-6 right-2 w-56 rotate-3 bg-white rounded-2xl shadow-2xl p-4 text-stone-800">
+              <div className="flex items-center gap-1.5 mb-3">
+                <span className="w-2 h-2 rounded-full bg-red-300" />
+                <span className="w-2 h-2 rounded-full bg-amber-300" />
+                <span className="w-2 h-2 rounded-full bg-emerald-300" />
+              </div>
+              <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
+                <span className="font-semibold text-sm">Rapat Koordinasi</span>
+                <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-sky-100 text-sky-700">Koordinasi</span>
+              </div>
+              <div className="text-[11px] text-stone-400 mb-3">12 Agustus 2026 · Ketua PA</div>
+              <div className="space-y-1.5">
+                {["Evaluasi capaian triwulan", "Rencana kerja bulan depan", "Pembagian tugas piket"].map((t) => (
+                  <div key={t} className="flex items-center gap-1.5 text-[11px] text-stone-600">
+                    <CheckCircle2 size={12} className="text-emerald-600 shrink-0" /> {t}
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="absolute bottom-4 left-2 w-40 -rotate-6 bg-white rounded-xl shadow-xl p-3 text-stone-800">
+              <div className="flex items-center gap-1.5 text-[11px] font-medium text-stone-600 mb-1.5">
+                <UserCheck size={13} className="text-emerald-700" /> Daftar Hadir
+              </div>
+              <div className="text-lg font-extrabold text-stone-800">18<span className="text-xs font-medium text-stone-400"> / 22 hadir</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* FITUR */}
+      <div className="max-w-5xl mx-auto px-6 py-14">
+        <div className="text-center mb-10">
+          <h2 className="text-xl font-bold text-stone-800">
+            FITUR <span className="text-emerald-700">RAPID</span>
+          </h2>
+          <p className="text-sm text-stone-400 mt-1">Semua kebutuhan pencatatan rapat, dalam satu aplikasi</p>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {features.map((f) => (
+            <div key={f.title} className="bg-white border border-stone-200/70 rounded-2xl p-5 text-center shadow-sm hover:shadow-md transition-shadow">
+              <div className="w-14 h-14 rounded-full bg-emerald-50 text-emerald-800 flex items-center justify-center mx-auto mb-3">
+                <f.icon size={22} />
+              </div>
+              <div className="text-sm font-semibold text-stone-800 mb-1">{f.title}</div>
+              <div className="text-xs text-stone-500 leading-relaxed">{f.desc}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* RAPAT TERBARU */}
+      {recent.length > 0 && (
+        <div className="max-w-5xl mx-auto px-6 pb-16">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-sm font-semibold text-stone-700">Rapat Terbaru</h2>
+            <button onClick={onGoToArsip} className="text-xs text-emerald-800 hover:underline flex items-center gap-1">
+              Lihat semua <ArrowRight size={12} />
+            </button>
+          </div>
+          <div className="grid md:grid-cols-3 gap-4">
+            {recent.map((m) => (
+              <button
+                key={m.id}
+                onClick={() => onSelectMeeting(m.id)}
+                className="text-left bg-white border border-stone-200/70 rounded-2xl p-4 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all"
+              >
+                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${CATEGORY_COLORS[m.category] || CATEGORY_COLORS.Lainnya}`}>
+                  {m.category}
+                </span>
+                <div className="font-medium text-stone-800 mt-2 truncate">{m.title || "(tanpa judul)"}</div>
+                <div className="text-xs text-stone-400 mt-0.5">{formatDate(m.date)}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
