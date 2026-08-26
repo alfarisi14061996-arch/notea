@@ -1,19 +1,32 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
-import { Plus, Search, ClipboardList, ChevronRight, X, FileDown, LayoutDashboard, Calendar, Trash2, AlertCircle, UserCheck, Camera, Image as ImageIcon, Upload, LogIn, LogOut, Paperclip, FileText, Download } from "lucide-react";
+import { Plus, Search, ClipboardList, ChevronRight, X, FileDown, LayoutDashboard, Calendar, Trash2, AlertCircle, UserCheck, Camera, Image as ImageIcon, Upload, LogIn, LogOut, Paperclip, FileText, Download, Archive, ChevronLeft } from "lucide-react";
 import { supabase } from "./supabaseClient";
 import { exportMeetingToDocx } from "./lib/exportDocx";
 import logo from "./logo.png";
 import { HAKIM_ROSTER, PEGAWAI_ROSTER } from "./staffRoster";
+import JSZip from "jszip";
+import { saveAs } from "file-saver";
 
 const DOCS_BUCKET = "notea-dokumentasi";
 const ATTACHMENTS_BUCKET = "rapid-lampiran";
 const ROSTER_NAMES = new Set([...HAKIM_ROSTER, ...PEGAWAI_ROSTER].map((p) => p.name));
+
+const MEETING_CATEGORIES = ["Rapat Pimpinan", "Rapat Rutin", "Rapat Evaluasi", "Rapat Koordinasi", "Lainnya"];
+
+const CATEGORY_COLORS = {
+  "Rapat Pimpinan": "bg-purple-100 text-purple-700",
+  "Rapat Rutin": "bg-stone-100 text-stone-600",
+  "Rapat Evaluasi": "bg-amber-100 text-amber-700",
+  "Rapat Koordinasi": "bg-sky-100 text-sky-700",
+  Lainnya: "bg-stone-100 text-stone-600",
+};
 
 const emptyDraft = () => ({
   id: null,
   title: "",
   date: new Date().toISOString().slice(0, 10),
   leader: "",
+  category: MEETING_CATEGORIES[1],
   agenda: "",
   discussion: "",
   attendees: [],
@@ -40,6 +53,7 @@ function mapMeetingFromDb(row) {
     title: row.title,
     date: row.date,
     leader: row.leader || "",
+    category: row.category || MEETING_CATEGORIES[1],
     agenda: row.agenda || "",
     discussion: row.discussion || "",
     attendees: (row.attendees || [])
@@ -71,14 +85,16 @@ export default function ENotulen() {
   const [meetings, setMeetings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [view, setView] = useState("list"); // list | dashboard | form | detail
+  const [view, setView] = useState("list"); // list | dashboard | calendar | form | detail
   const [draft, setDraft] = useState(emptyDraft());
   const [editingId, setEditingId] = useState(null);
   const [search, setSearch] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("Semua");
   const [selectedId, setSelectedId] = useState(null);
   const [loadError, setLoadError] = useState(false);
   const [toast, setToast] = useState("");
   const [uploadingDocs, setUploadingDocs] = useState(false);
+  const [zippingId, setZippingId] = useState(null);
   const [lightboxUrl, setLightboxUrl] = useState(null);
   const fileInputRef = useRef(null);
   const attachmentInputRef = useRef(null);
@@ -158,6 +174,7 @@ export default function ENotulen() {
       title: draft.title,
       date: draft.date,
       leader: draft.leader,
+      category: draft.category,
       agenda: draft.agenda,
       discussion: draft.discussion,
     };
@@ -289,16 +306,62 @@ export default function ENotulen() {
     showToast("Notulen dihapus");
   }
 
+  async function downloadAllAsZip(meeting) {
+    const totalFiles = meeting.documents.length + meeting.attachments.length;
+    if (totalFiles === 0) {
+      showToast("Belum ada dokumentasi atau lampiran untuk diunduh");
+      return;
+    }
+    setZippingId(meeting.id);
+    try {
+      const zip = new JSZip();
+      const docFolder = zip.folder("Dokumentasi");
+      const attFolder = zip.folder("Lampiran");
+
+      const usedNames = new Set();
+      function uniqueName(folder, name) {
+        let candidate = name || "berkas";
+        let i = 1;
+        while (usedNames.has(`${folder}/${candidate}`)) {
+          const dot = name.lastIndexOf(".");
+          candidate = dot > -1 ? `${name.slice(0, dot)} (${i})${name.slice(dot)}` : `${name} (${i})`;
+          i++;
+        }
+        usedNames.add(`${folder}/${candidate}`);
+        return candidate;
+      }
+
+      for (const d of meeting.documents) {
+        const res = await fetch(d.url);
+        const blob = await res.blob();
+        docFolder.file(uniqueName("Dokumentasi", d.fileName || `foto-${d.id}.jpg`), blob);
+      }
+      for (const a of meeting.attachments) {
+        const res = await fetch(a.url);
+        const blob = await res.blob();
+        attFolder.file(uniqueName("Lampiran", a.fileName || `lampiran-${a.id}`), blob);
+      }
+
+      const content = await zip.generateAsync({ type: "blob" });
+      saveAs(content, `${meeting.title || "rapat"} - Dokumentasi & Lampiran.zip`);
+    } catch (e) {
+      showToast("Gagal membuat file ZIP");
+    } finally {
+      setZippingId(null);
+    }
+  }
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return meetings;
-    return meetings.filter((m) =>
-      [m.title, m.leader, m.agenda, m.discussion, m.attendees.map((a) => a.name).join(" ")]
+    return meetings.filter((m) => {
+      if (categoryFilter !== "Semua" && m.category !== categoryFilter) return false;
+      if (!q) return true;
+      return [m.title, m.leader, m.agenda, m.discussion, m.attendees.map((a) => a.name).join(" ")]
         .join(" ")
         .toLowerCase()
-        .includes(q)
-    );
-  }, [meetings, search]);
+        .includes(q);
+    });
+  }, [meetings, search, categoryFilter]);
 
   const stats = useMemo(() => {
     const now = new Date();
@@ -371,6 +434,7 @@ export default function ENotulen() {
             {[
               ...(isAdmin ? [{ key: "dashboard", label: "Dasbor", icon: LayoutDashboard }] : []),
               { key: "list", label: "Arsip Notulen", icon: ClipboardList },
+              { key: "calendar", label: "Kalender", icon: Calendar },
             ].map((t) => (
               <button
                 key={t.key}
@@ -445,16 +509,38 @@ export default function ENotulen() {
           </div>
         )}
 
+        {view === "calendar" && (
+          <MeetingCalendar
+            meetings={meetings}
+            onSelectMeeting={(id) => {
+              setSelectedId(id);
+              setView("detail");
+            }}
+          />
+        )}
+
         {view === "list" && (
           <div className="space-y-4">
-            <div className="relative">
-              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Cari judul, topik, atau peserta..."
-                className="w-full pl-9 pr-3 py-2 text-sm border border-stone-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-800/40 focus:border-emerald-800"
-              />
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+                <input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Cari judul, topik, atau peserta..."
+                  className="w-full pl-9 pr-3 py-2 text-sm border border-stone-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-800/40 focus:border-emerald-800"
+                />
+              </div>
+              <select
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value)}
+                className="text-sm border border-stone-300 rounded-md px-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-800/40 focus:border-emerald-800 bg-white"
+              >
+                <option value="Semua">Semua Kategori</option>
+                {MEETING_CATEGORIES.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
             </div>
 
             {filtered.length === 0 ? (
@@ -474,7 +560,12 @@ export default function ENotulen() {
                       className="w-full text-left bg-white border border-stone-200 rounded-lg p-4 hover:border-emerald-800/40 hover:shadow-sm transition-all flex items-center justify-between"
                     >
                       <div className="min-w-0">
-                        <div className="font-medium text-stone-800 truncate">{m.title || "(tanpa judul)"}</div>
+                        <div className="flex items-center gap-2">
+                          <div className="font-medium text-stone-800 truncate">{m.title || "(tanpa judul)"}</div>
+                          <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded shrink-0 ${CATEGORY_COLORS[m.category] || CATEGORY_COLORS.Lainnya}`}>
+                            {m.category}
+                          </span>
+                        </div>
                         <div className="text-xs text-stone-400 mt-0.5">
                           {formatDate(m.date)} {m.leader && `· Dipimpin oleh ${m.leader}`}
                         </div>
@@ -530,6 +621,13 @@ export default function ENotulen() {
               </Field>
               <Field label="Pemimpin Rapat">
                 <input value={draft.leader} onChange={(e) => setDraft({ ...draft, leader: e.target.value })} className="input" />
+              </Field>
+              <Field label="Kategori Rapat">
+                <select value={draft.category} onChange={(e) => setDraft({ ...draft, category: e.target.value })} className="input">
+                  {MEETING_CATEGORIES.map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
               </Field>
             </div>
 
@@ -731,9 +829,14 @@ export default function ENotulen() {
           <div className="bg-white border border-stone-200 rounded-lg p-6 space-y-5">
             <div className="flex items-start justify-between">
               <div>
-                <h2 className="text-lg font-semibold text-stone-800" style={{ fontFamily: "Merriweather, Georgia, serif" }}>
-                  {selectedMeeting.title}
-                </h2>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h2 className="text-lg font-semibold text-stone-800" style={{ fontFamily: "Merriweather, Georgia, serif" }}>
+                    {selectedMeeting.title}
+                  </h2>
+                  <span className={`text-[11px] font-medium px-2 py-0.5 rounded ${CATEGORY_COLORS[selectedMeeting.category] || CATEGORY_COLORS.Lainnya}`}>
+                    {selectedMeeting.category}
+                  </span>
+                </div>
                 <p className="text-sm text-stone-400 mt-0.5">
                   {formatDate(selectedMeeting.date)} {selectedMeeting.leader && `· Dipimpin oleh ${selectedMeeting.leader}`}
                 </p>
@@ -745,6 +848,15 @@ export default function ENotulen() {
                 >
                   <FileDown size={13} /> Ekspor ke Word
                 </button>
+                {(selectedMeeting.documents.length + selectedMeeting.attachments.length) > 0 && (
+                  <button
+                    onClick={() => downloadAllAsZip(selectedMeeting)}
+                    disabled={zippingId === selectedMeeting.id}
+                    className="flex items-center gap-1 text-xs px-2.5 py-1.5 border border-stone-300 rounded-md hover:bg-stone-50 text-stone-600 disabled:opacity-60"
+                  >
+                    <Archive size={13} /> {zippingId === selectedMeeting.id ? "Menyiapkan..." : "Unduh Semua (ZIP)"}
+                  </button>
+                )}
                 {isAdmin && (
                   <>
                     <button onClick={() => startEdit(selectedMeeting)} className="text-xs px-2.5 py-1.5 border border-stone-300 rounded-md hover:bg-stone-50 text-stone-600">
@@ -877,6 +989,165 @@ export default function ENotulen() {
           box-shadow: 0 0 0 2px rgba(6,95,70,0.15);
         }
       `}</style>
+    </div>
+  );
+}
+
+function MeetingCalendar({ meetings, onSelectMeeting }) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const [cursor, setCursor] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
+  const [selectedDay, setSelectedDay] = useState(null);
+
+  const year = cursor.getFullYear();
+  const month = cursor.getMonth();
+
+  const meetingsByDate = useMemo(() => {
+    const map = {};
+    meetings.forEach((m) => {
+      if (!map[m.date]) map[m.date] = [];
+      map[m.date].push(m);
+    });
+    return map;
+  }, [meetings]);
+
+  const upcoming = useMemo(() => {
+    const todayStr = today.toISOString().slice(0, 10);
+    return meetings
+      .filter((m) => m.date >= todayStr)
+      .sort((a, b) => (a.date > b.date ? 1 : -1))
+      .slice(0, 8);
+  }, [meetings]);
+
+  const firstOfMonth = new Date(year, month, 1);
+  const startWeekday = firstOfMonth.getDay(); // 0 = Minggu
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const cells = [];
+  for (let i = 0; i < startWeekday; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+
+  const monthLabel = cursor.toLocaleDateString("id-ID", { month: "long", year: "numeric" });
+  const weekdayLabels = ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"];
+
+  function dateStr(d) {
+    return `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  }
+
+  const selectedMeetings = selectedDay ? meetingsByDate[selectedDay] || [] : [];
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-white border border-stone-200 rounded-lg p-4">
+        <div className="flex items-center justify-between mb-3">
+          <button
+            onClick={() => {
+              setCursor(new Date(year, month - 1, 1));
+              setSelectedDay(null);
+            }}
+            className="p-1.5 rounded hover:bg-stone-100 text-stone-500"
+          >
+            <ChevronLeft size={16} />
+          </button>
+          <h3 className="text-sm font-semibold text-stone-700 capitalize">{monthLabel}</h3>
+          <button
+            onClick={() => {
+              setCursor(new Date(year, month + 1, 1));
+              setSelectedDay(null);
+            }}
+            className="p-1.5 rounded hover:bg-stone-100 text-stone-500"
+          >
+            <ChevronRight size={16} />
+          </button>
+        </div>
+
+        <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-medium text-stone-400 mb-1">
+          {weekdayLabels.map((w) => (
+            <div key={w}>{w}</div>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-7 gap-1">
+          {cells.map((d, idx) => {
+            if (d === null) return <div key={`empty-${idx}`} />;
+            const ds = dateStr(d);
+            const dayMeetings = meetingsByDate[ds] || [];
+            const isToday = ds === today.toISOString().slice(0, 10);
+            const isSelected = ds === selectedDay;
+            return (
+              <button
+                key={ds}
+                onClick={() => setSelectedDay(dayMeetings.length ? ds : null)}
+                className={`aspect-square rounded-md flex flex-col items-center justify-center text-xs relative ${
+                  isSelected
+                    ? "bg-emerald-800 text-white"
+                    : isToday
+                    ? "bg-emerald-50 text-emerald-800 font-semibold"
+                    : dayMeetings.length
+                    ? "hover:bg-stone-100 text-stone-700"
+                    : "text-stone-400"
+                }`}
+              >
+                {d}
+                {dayMeetings.length > 0 && (
+                  <span className={`w-1.5 h-1.5 rounded-full mt-0.5 ${isSelected ? "bg-white" : "bg-emerald-600"}`} />
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {selectedDay && selectedMeetings.length > 0 && (
+        <div className="bg-white border border-stone-200 rounded-lg p-4">
+          <h3 className="text-sm font-semibold text-stone-700 mb-2">{formatDate(selectedDay)}</h3>
+          <div className="space-y-1.5">
+            {selectedMeetings.map((m) => (
+              <button
+                key={m.id}
+                onClick={() => onSelectMeeting(m.id)}
+                className="w-full flex items-center justify-between text-left p-2 rounded hover:bg-stone-50"
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded shrink-0 ${CATEGORY_COLORS[m.category] || CATEGORY_COLORS.Lainnya}`}>
+                    {m.category}
+                  </span>
+                  <span className="text-sm text-stone-800 truncate">{m.title || "(tanpa judul)"}</span>
+                </div>
+                <ChevronRight size={14} className="text-stone-300 shrink-0" />
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="bg-white border border-stone-200 rounded-lg p-4">
+        <h3 className="text-sm font-semibold text-stone-700 mb-3">Rapat Mendatang</h3>
+        {upcoming.length === 0 ? (
+          <p className="text-sm text-stone-400">Tidak ada rapat terjadwal ke depan.</p>
+        ) : (
+          <div className="divide-y divide-stone-100">
+            {upcoming.map((m) => (
+              <button
+                key={m.id}
+                onClick={() => onSelectMeeting(m.id)}
+                className="w-full flex items-center justify-between py-2 text-left hover:text-emerald-800 group"
+              >
+                <div className="min-w-0 flex items-center gap-2">
+                  <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded shrink-0 ${CATEGORY_COLORS[m.category] || CATEGORY_COLORS.Lainnya}`}>
+                    {m.category}
+                  </span>
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium truncate">{m.title || "(tanpa judul)"}</div>
+                    <div className="text-xs text-stone-400">{formatDate(m.date)}</div>
+                  </div>
+                </div>
+                <ChevronRight size={14} className="text-stone-300 group-hover:text-emerald-800 shrink-0" />
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

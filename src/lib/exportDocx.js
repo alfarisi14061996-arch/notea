@@ -262,6 +262,7 @@ export async function exportMeetingToDocx(meeting) {
           infoRow("Judul Rapat", meeting.title),
           infoRow("Tanggal", formatDate(meeting.date)),
           infoRow("Pemimpin Rapat", meeting.leader),
+          infoRow("Kategori", meeting.category),
           infoRow("Jumlah Hadir", meeting.attendees?.length ? `${meeting.attendees.length} orang` : "-"),
 
           sectionHeading("Agenda"),

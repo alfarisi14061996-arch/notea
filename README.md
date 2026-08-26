@@ -13,7 +13,7 @@ Aplikasi rapat digital RAPID dengan tiga modul dalam satu rapat — **notulen**,
 4. **Wajib untuk login admin tanpa email**: buka **Authentication → Providers → Email** → matikan **"Confirm email"** → Save. (Detail & alasannya ada di bagian 5 di bawah — admin nanti daftar akun sendiri langsung dari aplikasi, tidak perlu dibuatkan manual di sini.)
 
 > **Sudah pernah setup Supabase sebelumnya (sebelum fitur login admin ada)?**
-> Jalankan `supabase/migration_daftar_hadir_dokumentasi.sql` (kalau belum), lalu `supabase/migration_login_admin.sql`, lalu `supabase/migration_hapus_keputusan_action_item.sql` (kalau sempat pernah pakai fitur Keputusan/Action Item), lalu `supabase/migration_lampiran_rapat.sql` di SQL Editor — semuanya aman dijalankan di atas database yang sudah ada. Jangan lupa langkah 4 di atas.
+> Jalankan `supabase/migration_daftar_hadir_dokumentasi.sql` (kalau belum), lalu `supabase/migration_login_admin.sql`, lalu `supabase/migration_hapus_keputusan_action_item.sql` (kalau sempat pernah pakai fitur Keputusan/Action Item), lalu `supabase/migration_lampiran_rapat.sql`, lalu `supabase/migration_kategori_rapat.sql` di SQL Editor — semuanya aman dijalankan di atas database yang sudah ada. Jangan lupa langkah 4 di atas.
 
 ## 2. Konfigurasi Lokal
 
@@ -84,7 +84,13 @@ berikutnya bisa daftar dengan cara yang sama. Semua akun yang terdaftar punya ak
 setara (tidak ada tingkatan peran terpisah di versi ini) — pertimbangkan untuk tidak
 menyebarluaskan link "Buat akun baru" ke luar kalangan yang berwenang.
 
-## 6. Daftar Hadir (Roster Hakim & Pegawai)
+## 6. Fitur Tambahan
+
+- **Kategori Rapat** — setiap rapat diberi label (Rapat Pimpinan, Rapat Rutin, Rapat Evaluasi, Rapat Koordinasi, Lainnya), bisa difilter di Arsip Notulen. Untuk mengubah daftar kategorinya, edit array `MEETING_CATEGORIES` di `src/App.jsx`.
+- **Kalender** — tab baru yang menampilkan kalender bulanan (klik tanggal yang ada titik hijau untuk lihat rapat di hari itu) dan daftar rapat mendatang. Rapat otomatis muncul di sini kalau tanggalnya hari ini atau setelahnya — cukup buat entri notulen baru dengan tanggal ke depan (agenda boleh diisi lebih dulu, detail lain menyusul setelah rapat berlangsung).
+- **Unduh Semua (ZIP)** — tombol di halaman detail rapat untuk mengunduh seluruh foto dokumentasi dan lampiran dalam satu file ZIP (terpisah per folder), supaya tidak perlu unduh satu-satu.
+
+## 7. Daftar Hadir (Roster Hakim & Pegawai)
 
 Nama hakim dan pegawai untuk daftar hadir tercentang sudah ditanam langsung di kode, di
 `src/staffRoster.js` (bukan di database) — sesuai daftar yang Anda berikan (42 orang: 8 Hakim,
@@ -98,7 +104,7 @@ dan push ke GitHub (Vercel otomatis redeploy). Formatnya:
 { name: "NAMA LENGKAP, GELAR", position: "Jabatan" },
 ```
 
-## 7. Struktur Data
+## 8. Struktur Data
 
 - **meetings** — data utama rapat (judul, tanggal, pemimpin, agenda, pembahasan, keputusan)
 - **action_items** — tindak lanjut per rapat (tugas, PIC, deadline, status)
@@ -108,7 +114,7 @@ dan push ke GitHub (Vercel otomatis redeploy). Formatnya:
 
 Semua tabel terhubung ke `meetings` lewat `meeting_id` dengan `ON DELETE CASCADE` — hapus satu rapat otomatis menghapus action item, daftar hadir, dan referensi dokumentasinya (file di storage juga ikut dibersihkan oleh aplikasi saat rapat dihapus).
 
-## 8. Catatan Keamanan
+## 9. Catatan Keamanan
 
 Policy Supabase sekarang membatasi tulis (insert/update/delete) hanya untuk pengguna yang
 sudah login lewat Supabase Auth (`auth.role() = 'authenticated'`); baca (select) tetap terbuka
@@ -118,4 +124,4 @@ ketat karena arsipnya juga dibuka untuk publik.
 
 Kalau ke depan ingin ada beberapa tingkat admin (misalnya admin biasa vs super-admin), perlu
 tabel peran tambahan dan policy yang memeriksa peran tersebut, bukan hanya `auth.role() =
-'authenticated'` yang menyamaratakan semua pengguna yang login. 
+'authenticated'` yang menyamaratakan semua pengguna yang login.

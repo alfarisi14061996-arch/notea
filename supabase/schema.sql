@@ -10,6 +10,7 @@ create table if not exists meetings (
   title text not null,
   date date not null,
   leader text,
+  category text not null default 'Rapat Rutin',
   agenda text,
   discussion text,
   created_at timestamptz not null default now(),
