@@ -410,26 +410,37 @@ export default function ENotulen() {
 
   return (
     <div className="min-h-screen bg-stone-50 text-stone-800">
-      <div className="bg-emerald-900 text-stone-50">
-        <div className="max-w-5xl mx-auto px-6 py-5 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <img src={logo} alt="Logo RAPID" className="w-11 h-11 shrink-0" />
+      <div
+        className="text-stone-50 relative overflow-hidden"
+        style={{ background: "linear-gradient(135deg, #052e21 0%, #0b4a37 55%, #0f5c44 100%)" }}
+      >
+        <div
+          className="absolute inset-0 opacity-[0.07] pointer-events-none"
+          style={{
+            backgroundImage:
+              "radial-gradient(circle at 20% 20%, #ffffff 1px, transparent 1px), radial-gradient(circle at 60% 70%, #ffffff 1px, transparent 1px)",
+            backgroundSize: "48px 48px, 64px 64px",
+          }}
+        />
+        <div className="max-w-5xl mx-auto px-6 pt-7 pb-6 flex items-center justify-between relative">
+          <div className="flex items-center gap-3.5">
+            <img src={logo} alt="Logo RAPID" className="w-12 h-12 shrink-0 drop-shadow-lg" />
             <div>
-              <div className="text-[10px] uppercase tracking-[0.2em] text-emerald-300 font-semibold">Pengadilan Agama Purwokerto</div>
-              <h1 className="text-lg font-bold leading-tight" style={{ fontFamily: "Merriweather, Georgia, serif" }}>RAPID</h1>
-              <div className="text-[11px] text-emerald-200 leading-tight">Rapat Digital Terintegrasi</div>
+              <div className="text-[10px] uppercase tracking-[0.22em] text-emerald-300 font-semibold">Pengadilan Agama Purwokerto</div>
+              <h1 className="text-2xl font-extrabold leading-tight tracking-tight" style={{ fontFamily: "Merriweather, Georgia, serif" }}>RAPID</h1>
+              <div className="text-[12px] text-emerald-200/90 leading-tight">Rapat Digital Terintegrasi</div>
             </div>
           </div>
           {isAdmin && (
             <button
               onClick={startNew}
-              className="flex items-center gap-1.5 bg-emerald-400 hover:bg-emerald-300 text-emerald-950 font-semibold text-sm px-3.5 py-2 rounded-md transition-colors"
+              className="flex items-center gap-1.5 bg-emerald-400 hover:bg-emerald-300 text-emerald-950 font-semibold text-sm px-4 py-2.5 rounded-lg shadow-md shadow-emerald-900/30 transition-all hover:-translate-y-0.5"
             >
               <Plus size={16} /> Rapat Baru
             </button>
           )}
         </div>
-        <div className="max-w-5xl mx-auto px-6 flex items-center justify-between border-t border-emerald-800">
+        <div className="max-w-5xl mx-auto px-6 flex items-center justify-between border-t border-white/10 relative">
           <div className="flex gap-1">
             {[
               ...(isAdmin ? [{ key: "dashboard", label: "Dasbor", icon: LayoutDashboard }] : []),
@@ -439,10 +450,10 @@ export default function ENotulen() {
               <button
                 key={t.key}
                 onClick={() => setView(t.key)}
-                className={`flex items-center gap-1.5 text-sm px-3 py-2.5 border-b-2 transition-colors ${
+                className={`flex items-center gap-1.5 text-sm font-medium px-3.5 py-3 border-b-2 transition-colors ${
                   view === t.key || (t.key === "list" && (view === "detail" || view === "form"))
                     ? "border-emerald-400 text-emerald-300"
-                    : "border-transparent text-emerald-200 hover:text-emerald-300"
+                    : "border-transparent text-emerald-200/70 hover:text-emerald-300"
                 }`}
               >
                 <t.icon size={14} /> {t.label}
@@ -451,11 +462,11 @@ export default function ENotulen() {
           </div>
           <div className="py-1.5">
             {isAdmin ? (
-              <button onClick={handleLogout} className="flex items-center gap-1.5 text-xs text-emerald-200 hover:text-white px-2 py-1">
+              <button onClick={handleLogout} className="flex items-center gap-1.5 text-xs text-emerald-200/80 hover:text-white px-2 py-1">
                 <LogOut size={13} /> Keluar
               </button>
             ) : (
-              <button onClick={() => setShowLogin(true)} className="flex items-center gap-1.5 text-xs text-emerald-200 hover:text-white px-2 py-1">
+              <button onClick={() => setShowLogin(true)} className="flex items-center gap-1.5 text-xs text-emerald-200/80 hover:text-white px-2 py-1">
                 <LogIn size={13} /> Masuk sebagai Admin
               </button>
             )}
@@ -523,18 +534,18 @@ export default function ENotulen() {
           <div className="space-y-4">
             <div className="flex gap-2">
               <div className="relative flex-1">
-                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+                <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400" />
                 <input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Cari judul, topik, atau peserta..."
-                  className="w-full pl-9 pr-3 py-2 text-sm border border-stone-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-800/40 focus:border-emerald-800"
+                  className="w-full pl-10 pr-3 py-2.5 text-sm border border-stone-300 rounded-xl bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-800/40 focus:border-emerald-800"
                 />
               </div>
               <select
                 value={categoryFilter}
                 onChange={(e) => setCategoryFilter(e.target.value)}
-                className="text-sm border border-stone-300 rounded-md px-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-800/40 focus:border-emerald-800 bg-white"
+                className="text-sm border border-stone-300 rounded-xl px-3 shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-800/40 focus:border-emerald-800 bg-white"
               >
                 <option value="Semua">Semua Kategori</option>
                 {MEETING_CATEGORIES.map((c) => (
@@ -557,12 +568,12 @@ export default function ENotulen() {
                         setSelectedId(m.id);
                         setView("detail");
                       }}
-                      className="w-full text-left bg-white border border-stone-200 rounded-lg p-4 hover:border-emerald-800/40 hover:shadow-sm transition-all flex items-center justify-between"
+                      className="w-full text-left bg-white border border-stone-200/70 rounded-2xl p-4 shadow-sm hover:shadow-md hover:border-emerald-800/30 hover:-translate-y-0.5 transition-all flex items-center justify-between"
                     >
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
                           <div className="font-medium text-stone-800 truncate">{m.title || "(tanpa judul)"}</div>
-                          <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded shrink-0 ${CATEGORY_COLORS[m.category] || CATEGORY_COLORS.Lainnya}`}>
+                          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${CATEGORY_COLORS[m.category] || CATEGORY_COLORS.Lainnya}`}>
                             {m.category}
                           </span>
                         </div>
@@ -597,7 +608,7 @@ export default function ENotulen() {
         )}
 
         {view === "form" && (
-          <div className="bg-white border border-stone-200 rounded-lg p-6 space-y-5">
+          <div className="bg-white border border-stone-200/70 rounded-2xl p-6 space-y-5 shadow-sm">
             <div className="flex items-center justify-between">
               <h2 className="font-semibold text-stone-800" style={{ fontFamily: "Merriweather, Georgia, serif" }}>
                 {editingId ? "Edit Notulen" : "Notulen Rapat Baru"}
@@ -817,7 +828,7 @@ export default function ENotulen() {
               <button
                 onClick={saveDraft}
                 disabled={saving}
-                className="px-4 py-2 text-sm bg-emerald-800 hover:bg-emerald-900 disabled:opacity-60 text-white rounded-md font-medium"
+                className="px-5 py-2.5 text-sm bg-emerald-800 hover:bg-emerald-900 disabled:opacity-60 text-white rounded-lg font-semibold shadow-sm hover:shadow transition-all"
               >
                 {saving ? (uploadingDocs ? "Mengunggah foto..." : "Menyimpan...") : "Simpan Notulen"}
               </button>
@@ -826,14 +837,14 @@ export default function ENotulen() {
         )}
 
         {view === "detail" && selectedMeeting && (
-          <div className="bg-white border border-stone-200 rounded-lg p-6 space-y-5">
+          <div className="bg-white border border-stone-200/70 rounded-2xl p-6 space-y-5 shadow-sm">
             <div className="flex items-start justify-between">
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
                   <h2 className="text-lg font-semibold text-stone-800" style={{ fontFamily: "Merriweather, Georgia, serif" }}>
                     {selectedMeeting.title}
                   </h2>
-                  <span className={`text-[11px] font-medium px-2 py-0.5 rounded ${CATEGORY_COLORS[selectedMeeting.category] || CATEGORY_COLORS.Lainnya}`}>
+                  <span className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-full ${CATEGORY_COLORS[selectedMeeting.category] || CATEGORY_COLORS.Lainnya}`}>
                     {selectedMeeting.category}
                   </span>
                 </div>
@@ -844,7 +855,7 @@ export default function ENotulen() {
               <div className="flex gap-2 shrink-0">
                 <button
                   onClick={() => exportMeetingToDocx(selectedMeeting)}
-                  className="flex items-center gap-1 text-xs px-2.5 py-1.5 border border-stone-300 rounded-md hover:bg-stone-50 text-stone-600"
+                  className="flex items-center gap-1 text-xs px-2.5 py-1.5 border border-stone-300 rounded-lg hover:bg-stone-50 hover:border-stone-400 text-stone-600 transition-colors"
                 >
                   <FileDown size={13} /> Ekspor ke Word
                 </button>
@@ -852,17 +863,17 @@ export default function ENotulen() {
                   <button
                     onClick={() => downloadAllAsZip(selectedMeeting)}
                     disabled={zippingId === selectedMeeting.id}
-                    className="flex items-center gap-1 text-xs px-2.5 py-1.5 border border-stone-300 rounded-md hover:bg-stone-50 text-stone-600 disabled:opacity-60"
+                    className="flex items-center gap-1 text-xs px-2.5 py-1.5 border border-stone-300 rounded-lg hover:bg-stone-50 hover:border-stone-400 text-stone-600 transition-colors disabled:opacity-60"
                   >
                     <Archive size={13} /> {zippingId === selectedMeeting.id ? "Menyiapkan..." : "Unduh Semua (ZIP)"}
                   </button>
                 )}
                 {isAdmin && (
                   <>
-                    <button onClick={() => startEdit(selectedMeeting)} className="text-xs px-2.5 py-1.5 border border-stone-300 rounded-md hover:bg-stone-50 text-stone-600">
+                    <button onClick={() => startEdit(selectedMeeting)} className="text-xs px-2.5 py-1.5 border border-stone-300 rounded-lg hover:bg-stone-50 hover:border-stone-400 text-stone-600 transition-colors">
                       Edit
                     </button>
-                    <button onClick={() => deleteMeeting(selectedMeeting.id)} className="text-xs px-2.5 py-1.5 border border-red-200 text-red-600 rounded-md hover:bg-red-50">
+                    <button onClick={() => deleteMeeting(selectedMeeting.id)} className="text-xs px-2.5 py-1.5 border border-red-200 text-red-600 rounded-lg hover:bg-red-50 transition-colors">
                       Hapus
                     </button>
                   </>
@@ -979,14 +990,15 @@ export default function ENotulen() {
         .input {
           width: 100%;
           font-size: 0.875rem;
-          padding: 0.5rem 0.75rem;
+          padding: 0.6rem 0.85rem;
           border: 1px solid #d6d3d1;
-          border-radius: 0.375rem;
+          border-radius: 0.65rem;
           outline: none;
+          transition: border-color 0.15s, box-shadow 0.15s;
         }
         .input:focus {
           border-color: #065f46;
-          box-shadow: 0 0 0 2px rgba(6,95,70,0.15);
+          box-shadow: 0 0 0 3px rgba(6,95,70,0.12);
         }
       `}</style>
     </div>
@@ -1038,7 +1050,7 @@ function MeetingCalendar({ meetings, onSelectMeeting }) {
 
   return (
     <div className="space-y-4">
-      <div className="bg-white border border-stone-200 rounded-lg p-4">
+      <div className="bg-white border border-stone-200/70 rounded-2xl p-4 shadow-sm">
         <div className="flex items-center justify-between mb-3">
           <button
             onClick={() => {
@@ -1099,7 +1111,7 @@ function MeetingCalendar({ meetings, onSelectMeeting }) {
       </div>
 
       {selectedDay && selectedMeetings.length > 0 && (
-        <div className="bg-white border border-stone-200 rounded-lg p-4">
+        <div className="bg-white border border-stone-200/70 rounded-2xl p-4 shadow-sm">
           <h3 className="text-sm font-semibold text-stone-700 mb-2">{formatDate(selectedDay)}</h3>
           <div className="space-y-1.5">
             {selectedMeetings.map((m) => (
@@ -1109,7 +1121,7 @@ function MeetingCalendar({ meetings, onSelectMeeting }) {
                 className="w-full flex items-center justify-between text-left p-2 rounded hover:bg-stone-50"
               >
                 <div className="flex items-center gap-2 min-w-0">
-                  <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded shrink-0 ${CATEGORY_COLORS[m.category] || CATEGORY_COLORS.Lainnya}`}>
+                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${CATEGORY_COLORS[m.category] || CATEGORY_COLORS.Lainnya}`}>
                     {m.category}
                   </span>
                   <span className="text-sm text-stone-800 truncate">{m.title || "(tanpa judul)"}</span>
@@ -1121,7 +1133,7 @@ function MeetingCalendar({ meetings, onSelectMeeting }) {
         </div>
       )}
 
-      <div className="bg-white border border-stone-200 rounded-lg p-4">
+      <div className="bg-white border border-stone-200/70 rounded-2xl p-4 shadow-sm">
         <h3 className="text-sm font-semibold text-stone-700 mb-3">Rapat Mendatang</h3>
         {upcoming.length === 0 ? (
           <p className="text-sm text-stone-400">Tidak ada rapat terjadwal ke depan.</p>
@@ -1134,7 +1146,7 @@ function MeetingCalendar({ meetings, onSelectMeeting }) {
                 className="w-full flex items-center justify-between py-2 text-left hover:text-emerald-800 group"
               >
                 <div className="min-w-0 flex items-center gap-2">
-                  <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded shrink-0 ${CATEGORY_COLORS[m.category] || CATEGORY_COLORS.Lainnya}`}>
+                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${CATEGORY_COLORS[m.category] || CATEGORY_COLORS.Lainnya}`}>
                     {m.category}
                   </span>
                   <div className="min-w-0">
@@ -1160,13 +1172,13 @@ function StatCard({ label, value, icon: Icon, accent }) {
   };
   const cls = accentMap[accent] || accentMap.default;
   return (
-    <div className="bg-white border border-stone-200 rounded-lg p-4 flex items-center gap-3">
-      <div className={`w-10 h-10 rounded-md flex items-center justify-center shrink-0 ${cls}`}>
-        <Icon size={18} />
+    <div className="bg-white border border-stone-200/70 rounded-2xl p-5 flex items-center gap-4 shadow-sm hover:shadow-md transition-shadow">
+      <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 ${cls}`}>
+        <Icon size={20} />
       </div>
       <div>
-        <div className="text-xl font-bold text-stone-800">{value}</div>
-        <div className="text-xs text-stone-400">{label}</div>
+        <div className="text-2xl font-extrabold text-stone-800 leading-tight">{value}</div>
+        <div className="text-xs text-stone-400 font-medium">{label}</div>
       </div>
     </div>
   );
@@ -1300,7 +1312,7 @@ function LoginModal({ onClose, onSuccess }) {
         <button
           type="submit"
           disabled={loading}
-          className="w-full py-2 text-sm bg-emerald-800 hover:bg-emerald-900 disabled:opacity-60 text-white rounded-md font-medium"
+          className="w-full py-2.5 text-sm bg-emerald-800 hover:bg-emerald-900 disabled:opacity-60 text-white rounded-lg font-semibold shadow-sm hover:shadow transition-all"
         >
           {loading ? "Memproses..." : mode === "login" ? "Masuk" : "Buat Akun"}
         </button>
