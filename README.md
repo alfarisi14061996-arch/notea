@@ -118,4 +118,4 @@ ketat karena arsipnya juga dibuka untuk publik.
 
 Kalau ke depan ingin ada beberapa tingkat admin (misalnya admin biasa vs super-admin), perlu
 tabel peran tambahan dan policy yang memeriksa peran tersebut, bukan hanya `auth.role() =
-'authenticated'` yang menyamaratakan semua pengguna yang login.
+'authenticated'` yang menyamaratakan semua pengguna yang login. 
