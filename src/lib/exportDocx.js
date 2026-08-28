@@ -56,7 +56,7 @@ async function buildLetterhead() {
       new Paragraph({
         alignment: AlignmentType.CENTER,
         children: sealBuffer
-          ? [new ImageRun({ data: sealBuffer, transformation: { width: 55, height: 79 }, type: "png" })]
+          ? [new ImageRun({ data: sealBuffer, transformation: { width: 95, height: 136 }, type: "png" })]
           : [new TextRun({ text: "" })],
       }),
     ],
