@@ -9,7 +9,23 @@ import { saveAs } from "file-saver";
 
 const DOCS_BUCKET = "notea-dokumentasi";
 const ATTACHMENTS_BUCKET = "rapid-lampiran";
-const ROSTER_NAMES = new Set([...HAKIM_ROSTER, ...PEGAWAI_ROSTER].map((p) => p.name));
+const ROSTER_ORDER_LIST = [...HAKIM_ROSTER, ...PEGAWAI_ROSTER];
+const ROSTER_NAMES = new Set(ROSTER_ORDER_LIST.map((p) => p.name));
+const ROSTER_ORDER = new Map(ROSTER_ORDER_LIST.map((p, idx) => [p.name, idx]));
+
+// Urutkan daftar hadir mengikuti hierarki roster (Ketua, Hakim, lalu Pegawai
+// sesuai urutan di staffRoster.js). Peserta di luar roster (tamu) ditaruh
+// paling akhir, urutan penambahan tetap dipertahankan di antara sesama tamu.
+function sortAttendees(attendees) {
+  const NOT_IN_ROSTER = ROSTER_ORDER_LIST.length + 1;
+  return attendees
+    .slice()
+    .sort((a, b) => {
+      const ai = ROSTER_ORDER.has(a.name) ? ROSTER_ORDER.get(a.name) : NOT_IN_ROSTER;
+      const bi = ROSTER_ORDER.has(b.name) ? ROSTER_ORDER.get(b.name) : NOT_IN_ROSTER;
+      return ai - bi;
+    });
+}
 
 const MEETING_CATEGORIES = ["Rapat Pimpinan", "Rapat Rutin", "Rapat Evaluasi", "Rapat Koordinasi", "Lainnya"];
 
@@ -24,7 +40,7 @@ const CATEGORY_COLORS = {
 const emptyDraft = () => ({
   id: null,
   title: "",
-  date: new Date().toISOString().slice(0, 10),
+  date: todayLocalStr(),
   leader: "",
   category: MEETING_CATEGORIES[1],
   agenda: "",
@@ -46,6 +62,17 @@ function formatDate(iso) {
   return d.toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" });
 }
 
+// Tanggal hari ini menurut zona waktu LOKAL browser (bukan UTC).
+// toISOString() bawaan JS selalu mengonversi ke UTC, yang salah untuk WIB/WITA/WIT
+// (misal jam 02:00 WIB tanggal 28 masih tercatat UTC tanggal 27).
+function todayLocalStr() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 // Ubah baris dari Supabase (snake_case, relasi terpisah) menjadi bentuk state di UI
 function mapMeetingFromDb(row) {
   return {
@@ -56,10 +83,9 @@ function mapMeetingFromDb(row) {
     category: row.category || MEETING_CATEGORIES[1],
     agenda: row.agenda || "",
     discussion: row.discussion || "",
-    attendees: (row.attendees || [])
-      .slice()
-      .sort((a, b) => (a.created_at > b.created_at ? 1 : -1))
-      .map((a) => ({ id: a.id, name: a.name, position: a.position || "" })),
+    attendees: sortAttendees(
+      (row.attendees || []).map((a) => ({ id: a.id, name: a.name, position: a.position || "" }))
+    ),
     documents: (row.meeting_documents || [])
       .slice()
       .sort((a, b) => (a.created_at > b.created_at ? 1 : -1))
@@ -1201,7 +1227,7 @@ function MeetingCalendar({ meetings, onSelectMeeting }) {
   }, [meetings]);
 
   const upcoming = useMemo(() => {
-    const todayStr = today.toISOString().slice(0, 10);
+    const todayStr = todayLocalStr();
     return meetings
       .filter((m) => m.date >= todayStr)
       .sort((a, b) => (a.date > b.date ? 1 : -1))
@@ -1260,7 +1286,7 @@ function MeetingCalendar({ meetings, onSelectMeeting }) {
             if (d === null) return <div key={`empty-${idx}`} />;
             const ds = dateStr(d);
             const dayMeetings = meetingsByDate[ds] || [];
-            const isToday = ds === today.toISOString().slice(0, 10);
+            const isToday = ds === todayLocalStr();
             const isSelected = ds === selectedDay;
             return (
               <button

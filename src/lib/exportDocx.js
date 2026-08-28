@@ -45,8 +45,8 @@ async function buildLetterhead() {
   const sealBuffer = await fetchSealBuffer();
 
   // Halaman A4 default docx-js: 11906 dxa lebar, margin 1440 tiap sisi -> 9026 dxa usable
-  const LEFT_W = 1500;
-  const RIGHT_W = 7526;
+  const LEFT_W = 1750;
+  const RIGHT_W = 7276;
 
   const sealCell = new TableCell({
     width: { size: LEFT_W, type: WidthType.DXA },
