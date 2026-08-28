@@ -13,16 +13,17 @@ import {
   ShadingType,
   ImageRun,
   ExternalHyperlink,
+  VerticalAlign,
+  TableLayoutType,
 } from "docx";
 import { saveAs } from "file-saver";
-import logoUrl from "../logo.png";
+import sealUrl from "./official-seal.png";
 
 const PRIMARY = "0F3D3E";
-const ACCENT = "2E7D4F";
 
-async function fetchLogoBuffer() {
+async function fetchSealBuffer() {
   try {
-    const res = await fetch(logoUrl);
+    const res = await fetch(sealUrl);
     return await res.arrayBuffer();
   } catch (e) {
     return null;
@@ -35,56 +36,94 @@ function formatDate(iso) {
   return d.toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" });
 }
 
-// Kop surat resmi dengan logo NOTEA di kiri dan teks instansi rata tengah,
-// diikuti garis pembatas emas seperti kop surat instansi pemerintah.
-async function buildLetterhead() {
-  const logoBuffer = await fetchLogoBuffer();
+const NO_BORDER = { style: BorderStyle.NONE, size: 0, color: "FFFFFF" };
 
-  const logoParagraph = logoBuffer
-    ? new Paragraph({
+// Kop surat resmi Pengadilan Agama Purwokerto: lambang di kiri, identitas
+// instansi rata tengah di kanan, diikuti garis pembatas tebal — meniru format
+// kop surat dinas yang sudah baku dipakai kantor.
+async function buildLetterhead() {
+  const sealBuffer = await fetchSealBuffer();
+
+  // Halaman A4 default docx-js: 11906 dxa lebar, margin 1440 tiap sisi -> 9026 dxa usable
+  const LEFT_W = 1500;
+  const RIGHT_W = 7526;
+
+  const sealCell = new TableCell({
+    width: { size: LEFT_W, type: WidthType.DXA },
+    verticalAlign: VerticalAlign.CENTER,
+    borders: { top: NO_BORDER, bottom: NO_BORDER, left: NO_BORDER, right: NO_BORDER },
+    children: [
+      new Paragraph({
         alignment: AlignmentType.CENTER,
-        spacing: { after: 100 },
-        children: [
-          new ImageRun({
-            data: logoBuffer,
-            transformation: { width: 70, height: 70 },
-            type: "png",
-          }),
-        ],
+        children: sealBuffer
+          ? [new ImageRun({ data: sealBuffer, transformation: { width: 55, height: 79 }, type: "png" })]
+          : [new TextRun({ text: "" })],
+      }),
+    ],
+  });
+
+  const textLines = [
+    "MAHKAMAH AGUNG REPUBLIK INDONESIA",
+    "DIREKTORAT JENDERAL BADAN PERADILAN AGAMA",
+    "PENGADILAN TINGGI AGAMA SEMARANG",
+    "PENGADILAN AGAMA PURWOKERTO",
+  ].map(
+    (text) =>
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 20 },
+        children: [new TextRun({ text, bold: true, size: 24, color: "000000" })],
       })
-    : new Paragraph({ children: [new TextRun({ text: "" })] });
+  );
+
+  const addressLine = new Paragraph({
+    alignment: AlignmentType.CENTER,
+    spacing: { after: 20 },
+    children: [
+      new TextRun({
+        text: "JL. Gerilya NO. 7A Purwokerto – 53143 TELP. 0281-636366 FAX. 0281-643289",
+        bold: true,
+        size: 17,
+        color: "000000",
+      }),
+    ],
+  });
+
+  const contactLine = new Paragraph({
+    alignment: AlignmentType.CENTER,
+    children: [
+      new TextRun({ text: "website : ", bold: true, size: 17, color: "1155CC" }),
+      new ExternalHyperlink({
+        link: "http://www.pa-purwokerto.go.id",
+        children: [new TextRun({ text: "http://www.pa-purwokerto.go.id", bold: true, size: 17, color: "1155CC", underline: {} })],
+      }),
+      new TextRun({ text: " email : ", bold: true, size: 17, color: "1155CC" }),
+      new TextRun({ text: "pa.purwokerto@gmail.com", bold: true, size: 17, color: "1155CC" }),
+    ],
+  });
+
+  const textCell = new TableCell({
+    width: { size: RIGHT_W, type: WidthType.DXA },
+    verticalAlign: VerticalAlign.CENTER,
+    borders: { top: NO_BORDER, bottom: NO_BORDER, left: NO_BORDER, right: NO_BORDER },
+    children: [...textLines, addressLine, contactLine],
+  });
+
+  const headerTable = new Table({
+    width: { size: LEFT_W + RIGHT_W, type: WidthType.DXA },
+    columnWidths: [LEFT_W, RIGHT_W],
+    layout: TableLayoutType.FIXED,
+    borders: { top: NO_BORDER, bottom: NO_BORDER, left: NO_BORDER, right: NO_BORDER, insideHorizontal: NO_BORDER, insideVertical: NO_BORDER },
+    rows: [new TableRow({ children: [sealCell, textCell] })],
+  });
 
   return [
-    logoParagraph,
-    new Paragraph({
-      alignment: AlignmentType.CENTER,
-      children: [
-        new TextRun({ text: "MAHKAMAH AGUNG REPUBLIK INDONESIA", bold: true, size: 24, color: PRIMARY }),
-      ],
-    }),
-    new Paragraph({
-      alignment: AlignmentType.CENTER,
-      children: [
-        new TextRun({ text: "PENGADILAN AGAMA PURWOKERTO", bold: true, size: 32, color: PRIMARY }),
-      ],
-    }),
-    new Paragraph({
-      alignment: AlignmentType.CENTER,
-      spacing: { after: 60 },
-      children: [
-        new TextRun({
-          text: "Jl. [alamat kantor], Purwokerto, Kabupaten Banyumas, Jawa Tengah — Telp. [nomor] — Website: pa-purwokerto.go.id",
-          size: 16,
-          italics: true,
-          color: "555555",
-        }),
-      ],
-    }),
+    headerTable,
     new Paragraph({
       border: {
-        bottom: { style: BorderStyle.SINGLE, size: 18, color: ACCENT },
+        bottom: { style: BorderStyle.SINGLE, size: 24, color: "000000" },
       },
-      spacing: { after: 200 },
+      spacing: { before: 100, after: 200 },
       children: [new TextRun({ text: "" })],
     }),
   ];
@@ -138,7 +177,7 @@ function attendeesTable(attendees) {
     return new Paragraph({ children: [new TextRun({ text: "-", size: 22 })] });
   }
 
-  const headerCells = ["No", "Nama", "Jabatan / Unit", "Tanda Tangan"].map(
+  const headerCells = ["No", "Nama", "Jabatan / Unit"].map(
     (text) =>
       new TableCell({
         shading: { type: ShadingType.SOLID, color: PRIMARY, fill: PRIMARY },
@@ -155,10 +194,6 @@ function attendeesTable(attendees) {
           new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: String(idx + 1), size: 20 })] })] }),
           new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: a.name || "-", size: 20 })] })] }),
           new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: a.position || "-", size: 20 })] })] }),
-          new TableCell({
-            width: { size: 20, type: WidthType.PERCENTAGE },
-            children: [new Paragraph({ children: [new TextRun({ text: "", size: 20 })] })],
-          }),
         ],
       })
     );
