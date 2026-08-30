@@ -69,20 +69,26 @@ Level Security) sekalipun seseorang mencoba lewat cara lain di luar tampilan apl
 Login admin pakai **username + password biasa (tanpa email)**, seperti di CABLAKA. Di baliknya
 tetap memakai Supabase Auth (supaya keamanan RLS-nya tetap jalan) — username otomatis diubah
 jadi email samaran `username@rapid.internal` yang tidak pernah benar-benar mengirim email apa
-pun, jadi wajib satu langkah setup berikut:
+pun.
 
-1. Buka **Supabase Dashboard → Authentication → Providers → Email**.
-2. Matikan (nonaktifkan) opsi **"Confirm email"**.
-3. Save.
+**Tidak ada fitur daftar akun sendiri di aplikasi** — demi keamanan, hanya dua akun admin tetap
+yang dibuat manual lewat Supabase Dashboard:
 
-Tanpa langkah ini, akun yang baru daftar tidak akan bisa langsung login (Supabase menunggu
-klik link konfirmasi dari email yang tidak pernah terkirim).
+| Username | Password |
+|---|---|
+| `admin1` | `admin123` |
+| `admin2` | `admin12345` |
 
-Setelah itu, admin pertama tinggal buka aplikasi → klik **"Masuk sebagai Admin"** → pilih
-**"Belum punya akun admin? Buat akun baru"** → isi username & password sendiri. Admin
-berikutnya bisa daftar dengan cara yang sama. Semua akun yang terdaftar punya akses admin yang
-setara (tidak ada tingkatan peran terpisah di versi ini) — pertimbangkan untuk tidak
-menyebarluaskan link "Buat akun baru" ke luar kalangan yang berwenang.
+Cara membuatnya:
+
+1. Buka **Supabase Dashboard → Authentication → Users → Add user**.
+2. Isi **Email** dengan `admin1@rapid.internal`, **Password** dengan `admin123` → centang **"Auto Confirm User"** → Create user.
+3. Ulangi untuk `admin2@rapid.internal` / `admin12345`.
+4. Buka **Authentication → Providers → Email**, matikan opsi **"Allow new users to sign up"** — supaya tidak ada jalur pendaftaran akun baru sama sekali, baik dari aplikasi maupun API, selain dua akun ini.
+
+Kedua akun tersebut punya akses admin yang setara (tidak ada tingkatan peran terpisah di versi
+ini). Ganti password lewat **Authentication → Users → (pilih user) → Reset Password** kalau
+sewaktu-waktu perlu diperbarui.
 
 ## 6. Fitur Tambahan
 
