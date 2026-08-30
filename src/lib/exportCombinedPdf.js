@@ -91,9 +91,8 @@ async function buildNotulenPdf(meeting) {
   doc.line(PAGE_W / 2 - titleWidth / 2, y + 3, PAGE_W / 2 + titleWidth / 2, y + 3);
   y += 28;
 
-  // Info fields (label rata kiri, nilai mulai di posisi tetap)
+  // Info fields (label rata kiri, titik dua sejajar di kolom tetap)
   const labelX = MARGIN;
-  const valueX = MARGIN + 118;
   const fields = [
     ["Judul Rapat", meeting.title || "-"],
     ["Tanggal", formatDate(meeting.date)],
@@ -102,9 +101,14 @@ async function buildNotulenPdf(meeting) {
     ["Jumlah Hadir", meeting.attendees?.length ? `${meeting.attendees.length} orang` : "-"],
   ];
   doc.setFontSize(11);
+  doc.setFont("helvetica", "bold");
+  const maxLabelWidth = Math.max(...fields.map(([label]) => doc.getTextWidth(label)));
+  const colonX = labelX + maxLabelWidth + 4;
+  const valueX = colonX + 10;
   fields.forEach(([label, value]) => {
     doc.setFont("helvetica", "bold");
-    doc.text(`${label} :`, labelX, y);
+    doc.text(label, labelX, y);
+    doc.text(":", colonX, y);
     doc.setFont("helvetica", "normal");
     const valueLines = doc.splitTextToSize(value, PAGE_W - MARGIN - valueX);
     doc.text(valueLines, valueX, y);

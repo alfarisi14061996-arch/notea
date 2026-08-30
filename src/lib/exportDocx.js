@@ -145,22 +145,40 @@ function bodyParagraph(text) {
 }
 
 function infoTable(rows) {
+  const LABEL_W = 1900;
+  const COLON_W = 260;
+  const VALUE_W = 9026 - LABEL_W - COLON_W;
+  const NO_MARGIN = { top: 0, bottom: 0, left: 0, right: 0 };
+
   const tableRows = rows.map(
     ([label, value]) =>
       new TableRow({
         children: [
           new TableCell({
-            width: { size: 2200, type: WidthType.DXA },
+            width: { size: LABEL_W, type: WidthType.DXA },
+            margins: NO_MARGIN,
             borders: { top: NO_BORDER, bottom: NO_BORDER, left: NO_BORDER, right: NO_BORDER },
             children: [
               new Paragraph({
                 alignment: AlignmentType.LEFT,
-                children: [new TextRun({ text: `${label} :`, bold: true, size: 22 })],
+                children: [new TextRun({ text: label, bold: true, size: 22 })],
               }),
             ],
           }),
           new TableCell({
-            width: { size: 6826, type: WidthType.DXA },
+            width: { size: COLON_W, type: WidthType.DXA },
+            margins: NO_MARGIN,
+            borders: { top: NO_BORDER, bottom: NO_BORDER, left: NO_BORDER, right: NO_BORDER },
+            children: [
+              new Paragraph({
+                alignment: AlignmentType.LEFT,
+                children: [new TextRun({ text: ":", bold: true, size: 22 })],
+              }),
+            ],
+          }),
+          new TableCell({
+            width: { size: VALUE_W, type: WidthType.DXA },
+            margins: NO_MARGIN,
             borders: { top: NO_BORDER, bottom: NO_BORDER, left: NO_BORDER, right: NO_BORDER },
             children: [
               new Paragraph({
@@ -174,7 +192,7 @@ function infoTable(rows) {
 
   return new Table({
     width: { size: 9026, type: WidthType.DXA },
-    columnWidths: [2200, 6826],
+    columnWidths: [LABEL_W, COLON_W, VALUE_W],
     layout: TableLayoutType.FIXED,
     borders: { top: NO_BORDER, bottom: NO_BORDER, left: NO_BORDER, right: NO_BORDER, insideHorizontal: NO_BORDER, insideVertical: NO_BORDER },
     rows: tableRows,
