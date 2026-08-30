@@ -154,7 +154,7 @@ function infoTable(rows) {
             borders: { top: NO_BORDER, bottom: NO_BORDER, left: NO_BORDER, right: NO_BORDER },
             children: [
               new Paragraph({
-                alignment: AlignmentType.RIGHT,
+                alignment: AlignmentType.LEFT,
                 children: [new TextRun({ text: `${label} :`, bold: true, size: 22 })],
               }),
             ],
@@ -164,7 +164,6 @@ function infoTable(rows) {
             borders: { top: NO_BORDER, bottom: NO_BORDER, left: NO_BORDER, right: NO_BORDER },
             children: [
               new Paragraph({
-                indent: { left: 150 },
                 children: [new TextRun({ text: value || "-", size: 22 })],
               }),
             ],

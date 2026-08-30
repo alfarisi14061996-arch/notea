@@ -48,20 +48,22 @@ async function buildNotulenPdf(meeting) {
   let y = MARGIN;
 
   // Kop surat
+  const LOGO_W = 85;
+  const LOGO_H = 122;
   try {
     const { buf } = await fetchBuffer(sealUrl);
     const b64 = arrayBufferToBase64(buf);
-    doc.addImage(`data:image/png;base64,${b64}`, "PNG", MARGIN, y, 55, 79);
+    doc.addImage(`data:image/png;base64,${b64}`, "PNG", MARGIN, y, LOGO_W, LOGO_H);
   } catch (e) {
     // lanjut tanpa logo kalau gagal dimuat
   }
 
-  const textX = MARGIN + 80;
-  const textW = CONTENT_W - 80;
+  const textX = MARGIN + LOGO_W + 15;
+  const textW = CONTENT_W - LOGO_W - 15;
   doc.setFont("times", "bold");
   doc.setFontSize(13);
   const lines1 = ["MAHKAMAH AGUNG REPUBLIK INDONESIA", "DIREKTORAT JENDERAL BADAN PERADILAN AGAMA", "PENGADILAN TINGGI AGAMA SEMARANG", "PENGADILAN AGAMA PURWOKERTO"];
-  let ty = y + 12;
+  let ty = y + 24;
   lines1.forEach((l) => {
     doc.text(l, textX + textW / 2, ty, { align: "center" });
     ty += 16;
@@ -75,7 +77,7 @@ async function buildNotulenPdf(meeting) {
   doc.setTextColor(0, 0, 0);
   ty += 10;
 
-  y = Math.max(y + 90, ty + 8);
+  y = Math.max(y + LOGO_H + 8, ty + 8);
   doc.setDrawColor(0, 0, 0);
   doc.setLineWidth(2);
   doc.line(MARGIN, y, PAGE_W - MARGIN, y);
@@ -89,9 +91,9 @@ async function buildNotulenPdf(meeting) {
   doc.line(PAGE_W / 2 - titleWidth / 2, y + 3, PAGE_W / 2 + titleWidth / 2, y + 3);
   y += 28;
 
-  // Info fields (label rata kanan, titik dua sejajar)
-  const labelX = MARGIN + 110;
-  const valueX = MARGIN + 122;
+  // Info fields (label rata kiri, nilai mulai di posisi tetap)
+  const labelX = MARGIN;
+  const valueX = MARGIN + 118;
   const fields = [
     ["Judul Rapat", meeting.title || "-"],
     ["Tanggal", formatDate(meeting.date)],
@@ -102,7 +104,7 @@ async function buildNotulenPdf(meeting) {
   doc.setFontSize(11);
   fields.forEach(([label, value]) => {
     doc.setFont("helvetica", "bold");
-    doc.text(`${label} :`, labelX, y, { align: "right" });
+    doc.text(`${label} :`, labelX, y);
     doc.setFont("helvetica", "normal");
     const valueLines = doc.splitTextToSize(value, PAGE_W - MARGIN - valueX);
     doc.text(valueLines, valueX, y);
