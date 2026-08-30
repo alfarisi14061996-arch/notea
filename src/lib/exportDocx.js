@@ -144,13 +144,41 @@ function bodyParagraph(text) {
   });
 }
 
-function infoRow(label, value) {
-  return new Paragraph({
-    spacing: { after: 40 },
-    children: [
-      new TextRun({ text: `${label.padEnd(16, " ")}`, bold: true, size: 22 }),
-      new TextRun({ text: `: ${value || "-"}`, size: 22 }),
-    ],
+function infoTable(rows) {
+  const tableRows = rows.map(
+    ([label, value]) =>
+      new TableRow({
+        children: [
+          new TableCell({
+            width: { size: 2200, type: WidthType.DXA },
+            borders: { top: NO_BORDER, bottom: NO_BORDER, left: NO_BORDER, right: NO_BORDER },
+            children: [
+              new Paragraph({
+                alignment: AlignmentType.RIGHT,
+                children: [new TextRun({ text: `${label} :`, bold: true, size: 22 })],
+              }),
+            ],
+          }),
+          new TableCell({
+            width: { size: 6826, type: WidthType.DXA },
+            borders: { top: NO_BORDER, bottom: NO_BORDER, left: NO_BORDER, right: NO_BORDER },
+            children: [
+              new Paragraph({
+                indent: { left: 150 },
+                children: [new TextRun({ text: value || "-", size: 22 })],
+              }),
+            ],
+          }),
+        ],
+      })
+  );
+
+  return new Table({
+    width: { size: 9026, type: WidthType.DXA },
+    columnWidths: [2200, 6826],
+    layout: TableLayoutType.FIXED,
+    borders: { top: NO_BORDER, bottom: NO_BORDER, left: NO_BORDER, right: NO_BORDER, insideHorizontal: NO_BORDER, insideVertical: NO_BORDER },
+    rows: tableRows,
   });
 }
 
@@ -294,11 +322,14 @@ export async function exportMeetingToDocx(meeting) {
             spacing: { after: 200 },
             children: [new TextRun({ text: "NOTULEN RAPAT", bold: true, size: 28, underline: {} })],
           }),
-          infoRow("Judul Rapat", meeting.title),
-          infoRow("Tanggal", formatDate(meeting.date)),
-          infoRow("Pemimpin Rapat", meeting.leader),
-          infoRow("Kategori", meeting.category),
-          infoRow("Jumlah Hadir", meeting.attendees?.length ? `${meeting.attendees.length} orang` : "-"),
+          infoTable([
+            ["Judul Rapat", meeting.title],
+            ["Tanggal", formatDate(meeting.date)],
+            ["Pemimpin Rapat", meeting.leader],
+            ["Kategori", meeting.category],
+            ["Jumlah Hadir", meeting.attendees?.length ? `${meeting.attendees.length} orang` : "-"],
+          ]),
+          new Paragraph({ spacing: { after: 100 }, children: [new TextRun({ text: "" })] }),
 
           sectionHeading("Agenda"),
           bodyParagraph(meeting.agenda),

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from "react";
 import { Plus, Search, ClipboardList, ChevronRight, X, FileDown, LayoutDashboard, Calendar, Trash2, AlertCircle, UserCheck, Camera, Image as ImageIcon, Upload, LogIn, LogOut, Paperclip, FileText, Download, Archive, ChevronLeft, Home, ArrowRight, CheckCircle2 } from "lucide-react";
 import { supabase } from "./supabaseClient";
 import { exportMeetingToDocx } from "./lib/exportDocx";
+import { exportMeetingToCombinedPdf } from "./lib/exportCombinedPdf";
 import logo from "./logo.png";
 import { HAKIM_ROSTER, PEGAWAI_ROSTER } from "./staffRoster";
 import JSZip from "jszip";
@@ -121,6 +122,8 @@ export default function ENotulen() {
   const [toast, setToast] = useState("");
   const [uploadingDocs, setUploadingDocs] = useState(false);
   const [zippingId, setZippingId] = useState(null);
+  const [mergingId, setMergingId] = useState(null);
+  const [mergeStatus, setMergeStatus] = useState("");
   const [lightboxUrl, setLightboxUrl] = useState(null);
   const fileInputRef = useRef(null);
   const attachmentInputRef = useRef(null);
@@ -374,6 +377,24 @@ export default function ENotulen() {
       showToast("Gagal membuat file ZIP");
     } finally {
       setZippingId(null);
+    }
+  }
+
+  async function downloadCombinedPdf(meeting) {
+    setMergingId(meeting.id);
+    setMergeStatus("Menyiapkan...");
+    try {
+      const { skipped } = await exportMeetingToCombinedPdf(meeting, { onProgress: setMergeStatus });
+      showToast(
+        skipped > 0
+          ? `PDF gabungan tersimpan (${skipped} berkas non-PDF/gambar ditandai, unduh terpisah lewat ZIP)`
+          : "PDF gabungan tersimpan"
+      );
+    } catch (e) {
+      showToast("Gagal membuat PDF gabungan");
+    } finally {
+      setMergingId(null);
+      setMergeStatus("");
     }
   }
 
@@ -910,6 +931,13 @@ export default function ENotulen() {
                     <Archive size={13} /> {zippingId === selectedMeeting.id ? "Menyiapkan..." : "Unduh Semua (ZIP)"}
                   </button>
                 )}
+                <button
+                  onClick={() => downloadCombinedPdf(selectedMeeting)}
+                  disabled={mergingId === selectedMeeting.id}
+                  className="flex items-center gap-1 text-xs px-2.5 py-1.5 border border-stone-300 rounded-lg hover:bg-stone-50 hover:border-stone-400 text-stone-600 transition-colors disabled:opacity-60"
+                >
+                  <FileText size={13} /> {mergingId === selectedMeeting.id ? mergeStatus || "Menyiapkan..." : "Unduh PDF Gabungan"}
+                </button>
                 {isAdmin && (
                   <>
                     <button onClick={() => startEdit(selectedMeeting)} className="text-xs px-2.5 py-1.5 border border-stone-300 rounded-lg hover:bg-stone-50 hover:border-stone-400 text-stone-600 transition-colors">
