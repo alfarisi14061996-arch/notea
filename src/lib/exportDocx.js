@@ -366,7 +366,7 @@ export async function exportMeetingToDocx(meeting) {
           new Paragraph({ spacing: { before: 400 }, children: [new TextRun({ text: "" })] }),
           new Paragraph({
             alignment: AlignmentType.RIGHT,
-            children: [new TextRun({ text: `Purwokerto, ${formatDate(new Date().toISOString().slice(0, 10))}`, size: 22 })],
+            children: [new TextRun({ text: `Purwokerto, ${formatDate(meeting.date)}`, size: 22 })],
           }),
           new Paragraph({
             alignment: AlignmentType.RIGHT,

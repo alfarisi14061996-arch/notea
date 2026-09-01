@@ -173,8 +173,7 @@ async function buildNotulenPdf(meeting) {
   ensureSpace(120);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(11);
-  const todayStr = formatDate(new Date().toISOString().slice(0, 10));
-  doc.text(`Purwokerto, ${todayStr}`, PAGE_W - MARGIN, y, { align: "right" });
+  doc.text(`Purwokerto, ${formatDate(meeting.date)}`, PAGE_W - MARGIN, y, { align: "right" });
   y += 16;
   doc.text("Notulis,", PAGE_W - MARGIN, y, { align: "right" });
   y += 60;
