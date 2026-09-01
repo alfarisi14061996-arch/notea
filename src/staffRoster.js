@@ -14,7 +14,7 @@ export const HAKIM_ROSTER = [
 ];
 
 export const PEGAWAI_ROSTER = [
-  { name: "HELMI ASHARI, SH", position: "Panitera" },
+  { name: "EDI LAILI, S.H., M.H.", position: "Panitera" },
   { name: "SLAMET SUTADI, SAg.", position: "Sekretaris" },
   { name: "SRI LESTARI WASIS, SHI", position: "Panitera Muda Permohonan" },
   { name: "ARIF RACHMANTO, ST., S.H.", position: "Panitera Muda Hukum" },
